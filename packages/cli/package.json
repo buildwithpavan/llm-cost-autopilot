@@ -1,0 +1,26 @@
+{
+  "name": "@lca/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "lca": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lca/core": "0.1.0",
+    "@lca/persistence": "0.1.0",
+    "@lca/providers": "0.1.0",
+    "commander": "^12.1.0",
+    "pino": "^9.4.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}

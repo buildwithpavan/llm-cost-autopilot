@@ -1,0 +1,575 @@
+openapi: 3.1.0
+info:
+  title: LLM Cost Autopilot HTTP API
+  version: 0.1.0
+  description: |
+    Public HTTP surface for the LLM Cost Autopilot MVP. Every capability documented
+    here is mirrored by a CLI command in ./cli.md; the parity is asserted by a
+    contract test.
+
+    All non-`/v1/health` routes require an API-key bearer token via
+    `Authorization: Bearer <api_key>`.
+
+    This contract is versioned per constitution Principle IX. Breaking changes bump
+    the `info.version` MAJOR.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/health:
+    get:
+      summary: Liveness + dependency health probe
+      security: []  # unauthenticated
+      responses:
+        "200":
+          description: Service is live and its dependencies are reachable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Service is live but at least one required dependency is unhealthy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthResponse" }
+
+  /v1/completions:
+    post:
+      summary: Route and execute an LLM chat/completion request
+      description: |
+        Normalizes the request, resolves overrides (operator rule > client override > autopilot),
+        deterministically ranks candidate models, executes the top candidate, performs
+        at most one automatic fallback on transient failure (FR-033), and returns the
+        normalized response along with the routing decision. Every call produces one
+        TelemetryEvent regardless of success or failure.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompletionRequest" }
+      responses:
+        "200":
+          description: The autopilot produced a normalized response.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompletionResponse" }
+        "400":
+          description: Malformed request or invalid override target.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: Missing or invalid API key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "422":
+          description: |
+            The request cannot fit in any candidate model's context window (FR-030),
+            or override target not in catalog (FR-028), or all candidates unhealthy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "502":
+          description: All attempts (initial + fallback) failed against upstream providers (FR-035).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/routing/preview:
+    post:
+      summary: Dry-run routing without executing the provider call
+      description: |
+        Returns the RoutingDecision the autopilot would produce for the given request,
+        including the ranked candidate list and machine-readable rationale. Does not
+        contact any provider, does not write telemetry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompletionRequest" }
+      responses:
+        "200":
+          description: Routing decision that would be executed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoutingDecision" }
+        "400": { description: Malformed request. }
+        "401": { description: Missing or invalid API key. }
+        "422":
+          description: Request cannot be routed (context exceeded, no healthy provider, invalid override).
+
+  /v1/catalog:
+    get:
+      summary: List the currently configured provider/model catalog
+      responses:
+        "200":
+          description: Catalog snapshot with per-model capabilities and pricing pointers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pricingTableVersionId, models]
+                properties:
+                  pricingTableVersionId: { type: string }
+                  models:
+                    type: array
+                    items: { $ref: "#/components/schemas/Model" }
+
+  /v1/telemetry/events:
+    get:
+      summary: Query full-fidelity telemetry events (within retention window)
+      parameters:
+        - in: query
+          name: clientId
+          schema: { type: string }
+        - in: query
+          name: providerId
+          schema: { type: string }
+        - in: query
+          name: modelId
+          schema: { type: string }
+        - in: query
+          name: since
+          schema: { type: string, format: date-time }
+        - in: query
+          name: until
+          schema: { type: string, format: date-time }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated telemetry results.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: "#/components/schemas/TelemetryEvent" }
+                  nextCursor: { type: string, nullable: true }
+
+  /v1/telemetry/rollups:
+    get:
+      summary: Query aggregated telemetry rollups (long-range history)
+      parameters:
+        - in: query
+          name: providerId
+          schema: { type: string }
+        - in: query
+          name: modelId
+          schema: { type: string }
+        - in: query
+          name: fromDate
+          schema: { type: string, format: date }
+        - in: query
+          name: toDate
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Rollup rows in the requested range.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TelemetryRollup" }
+
+  /v1/telemetry/replay/{eventId}:
+    get:
+      summary: Reproduce a stored routing decision from telemetry (FR-022)
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: |
+            The recorded routing decision plus the deterministically re-computed one.
+            The two SHOULD match for reconciliation. When they differ, the response
+            identifies the disagreement for audit.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recorded, replayed, matches]
+                properties:
+                  recorded: { $ref: "#/components/schemas/RoutingDecision" }
+                  replayed: { $ref: "#/components/schemas/RoutingDecision" }
+                  matches: { type: boolean }
+        "404":
+          description: Event not found (may be outside 30-day full-fidelity window).
+
+  /v1/operator/rules:
+    get:
+      summary: List operator rules
+      responses:
+        "200":
+          description: All operator rules (enabled + disabled).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/OperatorRule" }
+    post:
+      summary: Create an operator rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OperatorRuleInput" }
+      responses:
+        "201":
+          description: Rule created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperatorRule" }
+
+  /v1/operator/rules/{ruleId}:
+    parameters:
+      - in: path
+        name: ruleId
+        required: true
+        schema: { type: string }
+    patch:
+      summary: Update an operator rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OperatorRuleInput" }
+      responses:
+        "200":
+          description: Updated rule.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperatorRule" }
+    delete:
+      summary: Delete an operator rule
+      responses:
+        "204": { description: Deleted. }
+
+  /v1/keys:
+    get:
+      summary: List API keys (metadata only; secrets are never returned)
+      responses:
+        "200":
+          description: Keys with metadata.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ApiKeyMetadata" }
+    post:
+      summary: Create an API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId, label]
+              properties:
+                clientId: { type: string }
+                label: { type: string }
+      responses:
+        "201":
+          description: |
+            Created. The `secret` field is returned exactly once and never appears
+            in any log, telemetry record, or future response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keyId, secret, clientId, label, createdAt]
+                properties:
+                  keyId: { type: string }
+                  secret: { type: string }
+                  clientId: { type: string }
+                  label: { type: string }
+                  createdAt: { type: string, format: date-time }
+
+  /v1/keys/{keyId}:
+    parameters:
+      - in: path
+        name: keyId
+        required: true
+        schema: { type: string }
+    delete:
+      summary: Revoke an API key
+      responses:
+        "204": { description: Revoked. }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            required: [ok]
+            properties:
+              ok: { type: boolean }
+              detail: { type: string }
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: true
+
+    Message:
+      type: object
+      required: [role, content]
+      properties:
+        role: { type: string, enum: [system, user, assistant] }
+        content: { type: string }
+
+    Capability:
+      type: string
+      enum: [tool_use, json_mode, function_calling, vision]
+
+    RequestRequirements:
+      type: object
+      properties:
+        maxLatencyMs: { type: integer, nullable: true, minimum: 1 }
+        maxCostUsd: { type: string, nullable: true, description: "Decimal string" }
+        minQualityTier: { type: string, enum: [low, standard, high], nullable: true }
+        requiredCapabilities:
+          type: array
+          items: { $ref: "#/components/schemas/Capability" }
+
+    ClientOverride:
+      type: object
+      properties:
+        providerId: { type: string, nullable: true }
+        modelId: { type: string, nullable: true }
+      description: At least one of providerId or modelId MUST be non-null when present.
+
+    CompletionRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/Message" }
+        requirements: { $ref: "#/components/schemas/RequestRequirements" }
+        override: { $ref: "#/components/schemas/ClientOverride", nullable: true }
+
+    CompletionResponse:
+      type: object
+      required: [requestId, providerId, modelId, content, usage, finishReason, decision]
+      properties:
+        requestId: { type: string, format: uuid }
+        providerId: { type: string }
+        modelId: { type: string }
+        content: { type: string }
+        usage:
+          type: object
+          required: [inputTokens, outputTokens]
+          properties:
+            inputTokens: { type: integer, minimum: 0 }
+            outputTokens: { type: integer, minimum: 0 }
+        finishReason: { type: string }
+        decision: { $ref: "#/components/schemas/RoutingDecision" }
+
+    Model:
+      type: object
+      required: [modelId, providerId, capabilities, contextWindow, qualityTier, publishedLatencyProfile, publishedReliabilityScore, pricingDescriptorRef]
+      properties:
+        modelId: { type: string }
+        providerId: { type: string }
+        capabilities:
+          type: array
+          items: { $ref: "#/components/schemas/Capability" }
+        contextWindow: { type: integer, minimum: 1 }
+        qualityTier: { type: string, enum: [low, standard, high] }
+        publishedLatencyProfile:
+          type: object
+          required: [p50Ms, p95Ms]
+          properties:
+            p50Ms: { type: integer, minimum: 0 }
+            p95Ms: { type: integer, minimum: 0 }
+        publishedReliabilityScore: { type: number, minimum: 0, maximum: 1 }
+        pricingDescriptorRef: { type: string }
+
+    RationaleEntry:
+      type: object
+      required: [factor, verdict, note]
+      properties:
+        factor: { type: string }
+        verdict: { type: string, enum: [eliminated, preferred, neutral] }
+        note: { type: string }
+
+    CandidateScore:
+      type: object
+      required: [providerId, modelId, included, scoreBreakdown]
+      properties:
+        providerId: { type: string }
+        modelId: { type: string }
+        included: { type: boolean }
+        exclusionReason: { type: string, nullable: true }
+        scoreBreakdown:
+          type: object
+          additionalProperties: { type: number }
+
+    RoutingDecision:
+      type: object
+      required: [decisionSource, shadowedSource, candidateRanking, chosenModelId, chosenProviderId, rationale, pricingTableVersionId, estimatedCostUsd]
+      properties:
+        decisionSource: { type: string, enum: [autopilot, client_override, operator_rule] }
+        shadowedSource: { type: string, enum: [client_override], nullable: true }
+        candidateRanking:
+          type: array
+          items: { $ref: "#/components/schemas/CandidateScore" }
+        chosenModelId: { type: string }
+        chosenProviderId: { type: string }
+        rationale:
+          type: array
+          items: { $ref: "#/components/schemas/RationaleEntry" }
+        pricingTableVersionId: { type: string }
+        estimatedCostUsd: { type: string, description: "Decimal string" }
+
+    Attempt:
+      type: object
+      required: [attemptIndex, providerId, modelId, startedAt, endedAt, latencyMs, errorClass, estimatedCostUsd, pricingTableVersionId]
+      properties:
+        attemptIndex: { type: integer, minimum: 0 }
+        providerId: { type: string }
+        modelId: { type: string }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time }
+        latencyMs: { type: integer, minimum: 0 }
+        inputTokens: { type: integer, nullable: true, minimum: 0 }
+        outputTokens: { type: integer, nullable: true, minimum: 0 }
+        errorClass:
+          type: string
+          enum: [none, timeout, rate_limit, upstream_5xx, upstream_4xx, invalid_request, context_exceeded, override_target_missing, provider_unavailable, terminal_fallback_exhausted]
+        estimatedCostUsd: { type: string }
+        actualCostUsd: { type: string, nullable: true }
+        pricingTableVersionId: { type: string }
+
+    TelemetryEvent:
+      type: object
+      required: [eventId, receivedAt, clientId, decisionSource, effectiveProviderId, effectiveModelId, attempts, aggregatedInputTokens, aggregatedOutputTokens, totalLatencyMs, terminalErrorClass, estimatedCostUsd, pricingTableVersionId, routingRationale]
+      properties:
+        eventId: { type: string, format: uuid }
+        receivedAt: { type: string, format: date-time }
+        clientId: { type: string }
+        decisionSource: { type: string, enum: [autopilot, client_override, operator_rule] }
+        shadowedSource: { type: string, enum: [client_override], nullable: true }
+        effectiveProviderId: { type: string }
+        effectiveModelId: { type: string }
+        attempts:
+          type: array
+          items: { $ref: "#/components/schemas/Attempt" }
+        aggregatedInputTokens: { type: integer, minimum: 0 }
+        aggregatedOutputTokens: { type: integer, minimum: 0 }
+        totalLatencyMs: { type: integer, minimum: 0 }
+        terminalErrorClass: { $ref: "#/components/schemas/Attempt/properties/errorClass" }
+        estimatedCostUsd: { type: string }
+        actualCostUsd: { type: string, nullable: true }
+        pricingTableVersionId: { type: string }
+        reconciled: { type: boolean, nullable: true }
+        routingRationale: { $ref: "#/components/schemas/RoutingDecision" }
+
+    TelemetryRollup:
+      type: object
+      required: [rollupDate, providerId, modelId, requestCount, terminalErrorCounts, inputTokensSum, outputTokensSum, estimatedCostSumUsd, actualCostSumUsd, latencyPercentilesMs, reconciledRate, decisionSourceCounts, aggregatedAt]
+      properties:
+        rollupDate: { type: string, format: date }
+        providerId: { type: string }
+        modelId: { type: string }
+        requestCount: { type: integer, minimum: 0 }
+        terminalErrorCounts:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }
+        inputTokensSum: { type: integer, minimum: 0 }
+        outputTokensSum: { type: integer, minimum: 0 }
+        estimatedCostSumUsd: { type: string }
+        actualCostSumUsd: { type: string }
+        latencyPercentilesMs:
+          type: object
+          required: [p50, p95, p99]
+          properties:
+            p50: { type: integer }
+            p95: { type: integer }
+            p99: { type: integer }
+        reconciledRate: { type: number, minimum: 0, maximum: 1 }
+        decisionSourceCounts:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }
+        aggregatedAt: { type: string, format: date-time }
+
+    OperatorRuleInput:
+      type: object
+      required: [priority, match, pin, enabled]
+      properties:
+        priority: { type: integer }
+        enabled: { type: boolean }
+        match:
+          type: object
+          properties:
+            clientIds:
+              type: array
+              nullable: true
+              items: { type: string }
+            requiredCapabilities:
+              type: array
+              nullable: true
+              items: { $ref: "#/components/schemas/Capability" }
+            minEstimatedTokens: { type: integer, nullable: true, minimum: 0 }
+            maxEstimatedTokens: { type: integer, nullable: true, minimum: 0 }
+        pin:
+          type: object
+          properties:
+            providerId: { type: string, nullable: true }
+            modelId: { type: string, nullable: true }
+
+    OperatorRule:
+      allOf:
+        - $ref: "#/components/schemas/OperatorRuleInput"
+        - type: object
+          required: [ruleId, createdAt, updatedAt]
+          properties:
+            ruleId: { type: string }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+
+    ApiKeyMetadata:
+      type: object
+      required: [keyId, clientId, label, createdAt]
+      properties:
+        keyId: { type: string }
+        clientId: { type: string }
+        label: { type: string }
+        createdAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time, nullable: true }
+        lastUsedAt: { type: string, format: date-time, nullable: true }

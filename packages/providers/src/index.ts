@@ -1,0 +1,10 @@
+export * from "./abstraction/index.js";
+export { createMockAdapter, createDefaultMockPair, createMockFromEnv } from "./mock/adapter.js";
+export type { MockAdapterOptions } from "./mock/adapter.js";
+export { createOpenAiAdapter } from "./openai/adapter.js";
+export type { OpenAiAdapterOptions } from "./openai/adapter.js";
+export { createAnthropicAdapter } from "./anthropic/adapter.js";
+export type { AnthropicAdapterOptions } from "./anthropic/adapter.js";
+export { createRegistry } from "./registry.js";
+export type { ProviderRegistry } from "./registry.js";
+export const PROVIDERS_VERSION = "0.1.0";

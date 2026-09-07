@@ -1,0 +1,19 @@
+title = "gitleaks config for llm-cost-autopilot"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "lca-mock-fail-first"
+description = "Ignore the LCA_MOCK_FAIL_FIRST env-var reference used by the mock adapter."
+regex = '''LCA_MOCK_FAIL_FIRST'''
+tags = ["allowlist"]
+allowlist = { paths = ["packages/providers/src/mock/", "specs/", "\.env\\.example"] }
+
+[allowlist]
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)coverage/''',
+  '''(^|/)specs/001-llm-routing-mvp/quickstart\.md$'''
+]

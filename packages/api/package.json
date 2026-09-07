@@ -1,0 +1,36 @@
+{
+  "name": "@lca/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest run",
+    "start": "node --enable-source-maps dist/index.js"
+  },
+  "dependencies": {
+    "@fastify/helmet": "^12.0.1",
+    "@lca/core": "0.1.0",
+    "@lca/persistence": "0.1.0",
+    "@lca/providers": "0.1.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.53.0",
+    "@opentelemetry/sdk-node": "^0.53.0",
+    "fastify": "^5.0.0",
+    "fastify-plugin": "^5.1.0",
+    "fastify-type-provider-zod": "^4.0.1",
+    "pino": "^9.4.0",
+    "prom-client": "^15.1.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@types/supertest": "^6.0.2",
+    "autocannon": "^7.15.0",
+    "supertest": "^7.0.0",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}

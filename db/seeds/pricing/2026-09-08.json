@@ -1,0 +1,13 @@
+{
+  "priceListDate": "2026-09-08",
+  "versionIdPrefix": "seed-2026-09-08",
+  "entries": [
+    { "providerId": "mock-cheap",   "modelId": "mock-cheap:small",           "unitInputUsdPerToken": "0.0000001",  "unitOutputUsdPerToken": "0.0000002" },
+    { "providerId": "mock-cheap",   "modelId": "mock-cheap:large",           "unitInputUsdPerToken": "0.0000005",  "unitOutputUsdPerToken": "0.000001"  },
+    { "providerId": "mock-fast",    "modelId": "mock-fast:default",          "unitInputUsdPerToken": "0.000001",   "unitOutputUsdPerToken": "0.000002"  },
+    { "providerId": "openai",       "modelId": "openai:gpt-4o-mini",         "unitInputUsdPerToken": "0.00000015", "unitOutputUsdPerToken": "0.0000006" },
+    { "providerId": "openai",       "modelId": "openai:gpt-4o",              "unitInputUsdPerToken": "0.0000025",  "unitOutputUsdPerToken": "0.00001"   },
+    { "providerId": "anthropic",    "modelId": "anthropic:claude-3-5-haiku",  "unitInputUsdPerToken": "0.0000008",  "unitOutputUsdPerToken": "0.000004"  },
+    { "providerId": "anthropic",    "modelId": "anthropic:claude-3-5-sonnet", "unitInputUsdPerToken": "0.000003",   "unitOutputUsdPerToken": "0.000015"  }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "name": "@lca/providers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./contract-tests": {
+      "types": "./dist/contract-tests/index.d.ts",
+      "default": "./dist/contract-tests/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lca/core": "0.1.0",
+    "zod": "^3.23.8"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "openai": "^4.68.0"
+  },
+  "peerDependenciesMeta": {
+    "openai": { "optional": true },
+    "@anthropic-ai/sdk": { "optional": true }
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "@types/node": "^22.7.5",
+    "openai": "^4.68.0",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}

@@ -1,0 +1,73 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    name: build + typecheck + lint + test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: lca
+          POSTGRES_PASSWORD: lca
+          POSTGRES_DB: lca
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd="pg_isready -U lca -d lca"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+    env:
+      DATABASE_URL: postgres://lca:lca@localhost:5432/lca
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: typecheck
+        run: npm run typecheck
+      - name: lint
+        run: npm run lint
+      - name: build
+        run: npm run build
+      - name: test
+        run: npm run test -- --coverage
+      - name: bench smoke (routing overhead)
+        run: npm run bench:overhead || true
+
+  provider-core-boundary:
+    name: no cross-package leakage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: guard core/persistence/api from vendor SDK imports
+        run: |
+          set -euo pipefail
+          if git grep -nE "from ['\"](openai|@anthropic-ai/sdk)['\"]" -- \
+                'packages/core/**/*.ts' 'packages/persistence/**/*.ts' 'packages/api/**/*.ts' 'packages/cli/**/*.ts'; then
+            echo "::error::vendor SDK imported outside packages/providers"
+            exit 1
+          fi
+      - name: guard against core edits when adding a provider
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          BASE_SHA=${{ github.event.pull_request.base.sha }}
+          HEAD_SHA=${{ github.event.pull_request.head.sha }}
+          git fetch --no-tags --depth=50 origin "$BASE_SHA" || true
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          if echo "$changed" | grep -qE '^packages/providers/'; then
+            if echo "$changed" | grep -qE '^packages/core/'; then
+              if ! echo "${{ join(github.event.pull_request.labels.*.name, ',') }}" | grep -q 'allow-core-change'; then
+                echo "::error::PR touches both packages/providers and packages/core; add 'allow-core-change' label with justification"
+                exit 1
+              fi
+            fi
+          fi

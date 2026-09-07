@@ -1,0 +1,45 @@
+{
+  "name": "llm-cost-autopilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Intelligent LLM orchestration and cost-optimization layer.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --build --pretty",
+    "lint": "eslint \"packages/*/src/**/*.ts\" \"packages/*/test/**/*.ts\"",
+    "format": "prettier --write \"packages/*/src/**/*.{ts,js,json,md}\"",
+    "format:check": "prettier --check \"packages/*/src/**/*.{ts,js,json,md}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "node --enable-source-maps packages/persistence/dist/db/migrate.js",
+    "db:seed": "node --enable-source-maps packages/persistence/dist/db/seed.js",
+    "start:api": "node --enable-source-maps packages/api/dist/index.js",
+    "bench:overhead": "vitest bench --run packages/core/bench",
+    "bench:throughput": "node packages/api/bench/throughput.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/buildwithpavan/llm-cost-autopilot.git"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.7.5",
+    "@typescript-eslint/eslint-plugin": "^8.8.0",
+    "@typescript-eslint/parser": "^8.8.0",
+    "eslint": "^9.11.1",
+    "eslint-plugin-import": "^2.31.0",
+    "prettier": "^3.3.3",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}
