@@ -215,46 +215,46 @@ Monorepo layout from [plan.md](./plan.md#project-structure):
 
 ### Fallback + reliability
 
-- [ ] T093 [P] Write unit tests for the fallback contract in [packages/core/test/fallback.test.ts](../../packages/core/test/fallback.test.ts) covering FR-033/FR-034/FR-035 — transient errors trigger exactly one fallback, non-transient errors do not, override targets do not fallback, chain never exceeds length 2, terminal error class is set correctly.
-- [ ] T094 Implement fallback executor in [packages/core/src/routing/execute-with-fallback.ts](../../packages/core/src/routing/execute-with-fallback.ts); wire into [packages/api/src/routes/completions.ts](../../packages/api/src/routes/completions.ts). Make T093 pass and re-run Quickstart Scenario 5.
-- [ ] T095 [P] Integration test for fallback in [packages/api/test/integration/fallback.test.ts](../../packages/api/test/integration/fallback.test.ts) with `LCA_MOCK_FAIL_FIRST=upstream_5xx` — both attempts recorded, terminal outcome `none`.
+- [X] T093 [P] Write unit tests for the fallback contract in [packages/core/test/fallback.test.ts](../../packages/core/test/fallback.test.ts) covering FR-033/FR-034/FR-035 — transient errors trigger exactly one fallback, non-transient errors do not, override targets do not fallback, chain never exceeds length 2, terminal error class is set correctly.
+- [X] T094 Implement fallback executor in [packages/core/src/routing/execute-with-fallback.ts](../../packages/core/src/routing/execute-with-fallback.ts); wire into [packages/api/src/routes/completions.ts](../../packages/api/src/routes/completions.ts). Make T093 pass and re-run Quickstart Scenario 5.
+- [X] T095 [P] Integration test for fallback in [packages/api/test/integration/fallback.test.ts](../../packages/api/test/integration/fallback.test.ts) with `LCA_MOCK_FAIL_FIRST=upstream_5xx` — both attempts recorded, terminal outcome `none`.
 
 ### CLI + API parity (Principle II)
 
-- [ ] T096 Implement the CLI↔OpenAPI parity contract test in [packages/api/test/contract/parity.test.ts](../../packages/api/test/contract/parity.test.ts) per [contracts/cli.md](./contracts/cli.md#parity-rules-asserted-by-contract-test): every documented HTTP path maps to a CLI command node, every CLI argument maps to an OpenAPI field, every command supports `--json` unless it produces no output.
+- [X] T096 Implement the CLI↔OpenAPI parity contract test in [packages/api/test/contract/parity.test.ts](../../packages/api/test/contract/parity.test.ts) per [contracts/cli.md](./contracts/cli.md#parity-rules-asserted-by-contract-test): every documented HTTP path maps to a CLI command node, every CLI argument maps to an OpenAPI field, every command supports `--json` unless it produces no output.
 
 ### Performance (Principle X, SC-007, SC-011)
 
-- [ ] T097 [P] Implement routing-overhead bench in [packages/core/bench/overhead.bench.ts](../../packages/core/bench/overhead.bench.ts) using `vitest bench`: asserts p50 ≤ 20 ms, p95 ≤ 75 ms on the routing pipeline against a fixed catalog.
-- [ ] T098 [P] Implement throughput bench in [packages/api/bench/throughput.mjs](../../packages/api/bench/throughput.mjs) using `autocannon`: 60 s @ 100 rps sustained then 60 s @ 500 rps burst against Mock provider; asserts zero telemetry write failures and RSS growth ≤ 100 MB.
-- [ ] T099 Wire `npm run bench:overhead` and `npm run bench:throughput` to CI as a request-path smoke stage in [.github/workflows/ci.yml](../../.github/workflows/ci.yml); gate merge on regressions.
+- [X] T097 [P] Implement routing-overhead bench in [packages/core/bench/overhead.bench.ts](../../packages/core/bench/overhead.bench.ts) using `vitest bench`: asserts p50 ≤ 20 ms, p95 ≤ 75 ms on the routing pipeline against a fixed catalog.
+- [X] T098 [P] Implement throughput bench in [packages/api/bench/throughput.mjs](../../packages/api/bench/throughput.mjs) using `autocannon`: 60 s @ 100 rps sustained then 60 s @ 500 rps burst against Mock provider; asserts zero telemetry write failures and RSS growth ≤ 100 MB.
+- [X] T099 Wire `npm run bench:overhead` and `npm run bench:throughput` to CI as a request-path smoke stage in [.github/workflows/ci.yml](../../.github/workflows/ci.yml); gate merge on regressions.
 
 ### Security + redaction (Principle VII, SC-009)
 
-- [ ] T100 [P] Fuzz test for redaction in [packages/core/test/redaction.fuzz.test.ts](../../packages/core/test/redaction.fuzz.test.ts) generating 1 000 secret-shaped payloads (`sk-*`, bearers, emails, phones, cards) embedded in messages; asserts none appear in the persisted `TelemetryEvent`.
-- [ ] T101 [P] End-to-end secret-leak audit script in [scripts/audit-secrets.mjs](../../scripts/audit-secrets.mjs) that runs the test suite with a known API-key value and then greps the full test-run output (`stdout`, `stderr`, DB dump) for that value; MUST exit 0 with zero matches. Wire to CI.
-- [ ] T102 Enforce `no-restricted-imports` for vendor SDKs and confirm ESLint fails on any core/persistence/api file importing `openai` or `@anthropic-ai/sdk` (Principle VI); commit a fixture test in [packages/core/test/no-vendor-imports.test.ts](../../packages/core/test/no-vendor-imports.test.ts).
+- [X] T0100 [P] Fuzz test for redaction in [packages/core/test/redaction.fuzz.test.ts](../../packages/core/test/redaction.fuzz.test.ts) generating 1 000 secret-shaped payloads (`sk-*`, bearers, emails, phones, cards) embedded in messages; asserts none appear in the persisted `TelemetryEvent`.
+- [X] T0101 [P] End-to-end secret-leak audit script in [scripts/audit-secrets.mjs](../../scripts/audit-secrets.mjs) that runs the test suite with a known API-key value and then greps the full test-run output (`stdout`, `stderr`, DB dump) for that value; MUST exit 0 with zero matches. Wire to CI.
+- [X] T0102 Enforce `no-restricted-imports` for vendor SDKs and confirm ESLint fails on any core/persistence/api file importing `openai` or `@anthropic-ai/sdk` (Principle VI); commit a fixture test in [packages/core/test/no-vendor-imports.test.ts](../../packages/core/test/no-vendor-imports.test.ts).
 
 ### Provider scaffold + adapter add-only guarantee (SC-005)
 
-- [ ] T103 [P] Implement provider scaffolder script at [scripts/scaffold-provider.mjs](../../scripts/scaffold-provider.mjs) referenced by Quickstart Scenario 8: creates `packages/providers/src/<name>/`, generates a contract-test stub, and registers the adapter.
-- [ ] T104 [P] CI guard in [.github/workflows/ci.yml](../../.github/workflows/ci.yml) that flags PRs which touch both `packages/providers/**` and `packages/core/**` and requires an override label (per [contracts/provider.md](./contracts/provider.md#adding-a-new-provider)).
+- [X] T0103 [P] Implement provider scaffolder script at [scripts/scaffold-provider.mjs](../../scripts/scaffold-provider.mjs) referenced by Quickstart Scenario 8: creates `packages/providers/src/<name>/`, generates a contract-test stub, and registers the adapter.
+- [X] T0104 [P] CI guard in [.github/workflows/ci.yml](../../.github/workflows/ci.yml) that flags PRs which touch both `packages/providers/**` and `packages/core/**` and requires an override label (per [contracts/provider.md](./contracts/provider.md#adding-a-new-provider)).
 
 ### Documentation
 
-- [ ] T105 [P] Rewrite [README.md](../../README.md) with the product statement, quickstart pointer, and architecture summary from [plan.md](./plan.md).
-- [ ] T106 [P] Add [docs/operations.md](../../docs/operations.md) covering: enabling providers, adding operator rules, rotating API keys, tracing/metric endpoints, retention behavior.
+- [X] T0105 [P] Rewrite [README.md](../../README.md) with the product statement, quickstart pointer, and architecture summary from [plan.md](./plan.md).
+- [X] T0106 [P] Add [docs/operations.md](../../docs/operations.md) covering: enabling providers, adding operator rules, rotating API keys, tracing/metric endpoints, retention behavior.
 
 ### Additional coverage from /speckit-analyze
 
 - [X] T0109 [P] [US2] Integration test asserting correlation-ID round-trip in [packages/api/test/integration/correlation-id.test.ts](../../packages/api/test/integration/correlation-id.test.ts): submit a request with a client-supplied `x-request-id` header and verify (a) the same value is echoed on the HTTP response header, (b) `TelemetryEvent.eventId` equals that value, and (c) OpenTelemetry span attributes on the request span carry it (FR-021).
-- [ ] T110 [P] [US1] Integration test asserting unhealthy providers are excluded from routing candidates in [packages/api/test/integration/unhealthy-exclusion.test.ts](../../packages/api/test/integration/unhealthy-exclusion.test.ts): mark one adapter unhealthy in `provider_health_state`, submit a request, assert none of its models appear in `decision.candidateRanking[].included = true` and it is not the `chosenModelId` (FR-029).
-- [ ] T111 [P] [US1] Integration test asserting the all-unhealthy edge case in [packages/api/test/integration/all-unhealthy.test.ts](../../packages/api/test/integration/all-unhealthy.test.ts): mark every configured adapter unhealthy, submit a request, expect a structured error response with `error.code === "provider_unavailable"` and no provider call attempted (spec Edge Cases; FR-029, FR-035).
+- [X] T0110 [P] [US1] Integration test asserting unhealthy providers are excluded from routing candidates in [packages/api/test/integration/unhealthy-exclusion.test.ts](../../packages/api/test/integration/unhealthy-exclusion.test.ts): mark one adapter unhealthy in `provider_health_state`, submit a request, assert none of its models appear in `decision.candidateRanking[].included = true` and it is not the `chosenModelId` (FR-029).
+- [X] T0111 [P] [US1] Integration test asserting the all-unhealthy edge case in [packages/api/test/integration/all-unhealthy.test.ts](../../packages/api/test/integration/all-unhealthy.test.ts): mark every configured adapter unhealthy, submit a request, expect a structured error response with `error.code === "provider_unavailable"` and no provider call attempted (spec Edge Cases; FR-029, FR-035).
 
 ### Final validation
 
-- [ ] T107 Run every scenario in [quickstart.md](./quickstart.md) end-to-end from a clean checkout and record results in [docs/qa/quickstart-2026-09-08.md](../../docs/qa/quickstart-2026-09-08.md); block release on any failure.
-- [ ] T108 Verify constitution compliance final pass against every principle using the review checklist in [plan.md](./plan.md#post-design-constitution-re-check); attach output to the release PR.
+- [X] T0107 Run every scenario in [quickstart.md](./quickstart.md) end-to-end from a clean checkout and record results in [docs/qa/quickstart-2026-09-08.md](../../docs/qa/quickstart-2026-09-08.md); block release on any failure.
+- [X] T0108 Verify constitution compliance final pass against every principle using the review checklist in [plan.md](./plan.md#post-design-constitution-re-check); attach output to the release PR.
 
 ---
 

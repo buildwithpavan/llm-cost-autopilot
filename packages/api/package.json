@@ -26,11 +26,13 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@lca/cli": "0.1.0",
     "@types/node": "^22.7.5",
     "@types/supertest": "^6.0.2",
     "autocannon": "^7.15.0",
     "supertest": "^7.0.0",
     "typescript": "^5.6.2",
-    "vitest": "^2.1.1"
+    "vitest": "^2.1.1",
+    "yaml": "^2.9.0"
   }
 }

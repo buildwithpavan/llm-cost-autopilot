@@ -1,4 +1,4 @@
-export { createApiKey, listApiKeyMetadata, revokeApiKey, verifyApiKey } from "./auth/keys.js";
+export { createApiKey, listApiKeyMetadata, revokeApiKey, verifyApiKey, invalidateVerifyCache } from "./auth/keys.js";
 export type { CreatedApiKey } from "./auth/keys.js";
 export { createDb, createPool } from "./db/schema.js";
 export type { Database, Db } from "./db/schema.js";

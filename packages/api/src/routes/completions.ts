@@ -9,7 +9,6 @@ import {
   redaction,
   routing,
   telemetry as coreTelemetry,
-  type Attempt,
   type CompletionRequest,
   type NormalizedRequest,
   type NormalizedResponse,
@@ -169,26 +168,65 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
       });
     }
 
-    const controller = new AbortController();
     const requestStart = Date.now();
-    const result = await adapter.execute(
-      {
-        request: normalized,
-        modelId: decision.chosenModelId,
-        pricingTable: snapshot.pricingTable,
-        deadlineAt: new Date(Date.now() + 30_000).toISOString(),
+    const controller = new AbortController();
+    const fallbackOutcome = await routing.executeWithFallback({
+      request: normalized,
+      decision,
+      pricingTable: snapshot.pricingTable,
+      execute: async ({ providerId, modelId, attemptIndex }) => {
+        const targetAdapter = deps.registry.get(providerId);
+        if (!targetAdapter) {
+          const now = new Date().toISOString();
+          return {
+            kind: "failure" as const,
+            attempt: {
+              attemptIndex,
+              providerId,
+              modelId,
+              startedAt: now,
+              endedAt: now,
+              latencyMs: 0,
+              inputTokens: null,
+              outputTokens: null,
+              errorClass: "provider_unavailable" as const,
+              estimatedCostUsd: "0",
+              actualCostUsd: null,
+              pricingTableVersionId: snapshot.pricingTable.versionId,
+            },
+          };
+        }
+        const outcome = await targetAdapter.execute(
+          {
+            request: normalized,
+            modelId,
+            pricingTable: snapshot.pricingTable,
+            deadlineAt: new Date(Date.now() + 30_000).toISOString(),
+          },
+          controller.signal,
+        );
+        if (outcome.kind === "success") {
+          return {
+            kind: "success" as const,
+            content: outcome.content,
+            finishReason: outcome.finishReason,
+            attempt: { ...outcome.attempt, attemptIndex },
+          };
+        }
+        return {
+          kind: "failure" as const,
+          attempt: { ...outcome.attempt, attemptIndex },
+        };
       },
-      controller.signal,
-    );
+    });
     const totalLatencyMs = Date.now() - requestStart;
 
-    const attempts: Attempt[] = [result.attempt];
     const teleEvent = coreTelemetry.buildTelemetryEvent({
       eventId,
       receivedAt: normalized.receivedAt,
       clientId: normalized.clientId,
       decision,
-      attempts,
+      attempts: fallbackOutcome.attempts,
       totalLatencyMs,
     });
     const redactedEvent = redaction.applyRedactionToTelemetry(teleEvent);
@@ -196,25 +234,27 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
       req.log.error({ err }, "telemetry write failed");
     });
 
-    if (result.kind !== "success") {
+    if (fallbackOutcome.finalResult.kind !== "success") {
+      const failedAttempt = fallbackOutcome.finalResult.attempt;
       throw new LcaError({
         httpStatus: 502,
-        code: result.attempt.errorClass,
-        message: `${decision.chosenProviderId}:${decision.chosenModelId} failed with ${result.attempt.errorClass}`,
-        details: { attempt: result.attempt, totalLatencyMs },
+        code: fallbackOutcome.terminalErrorClass,
+        message: `${failedAttempt.providerId}:${failedAttempt.modelId} failed with ${failedAttempt.errorClass}`,
+        details: { attempts: fallbackOutcome.attempts, totalLatencyMs },
       });
     }
 
+    const successAttempt = fallbackOutcome.finalResult.attempt;
     const body: CompletionResponseBody = {
       requestId: eventId,
-      providerId: decision.chosenProviderId,
-      modelId: decision.chosenModelId,
-      content: result.content,
+      providerId: successAttempt.providerId,
+      modelId: successAttempt.modelId,
+      content: fallbackOutcome.content ?? "",
       usage: {
-        inputTokens: result.attempt.inputTokens ?? 0,
-        outputTokens: result.attempt.outputTokens ?? 0,
+        inputTokens: successAttempt.inputTokens ?? 0,
+        outputTokens: successAttempt.outputTokens ?? 0,
       },
-      finishReason: result.finishReason,
+      finishReason: fallbackOutcome.finishReason ?? "stop",
       decision,
     };
     return reply.status(200).send(body);

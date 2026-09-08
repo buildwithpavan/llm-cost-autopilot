@@ -40,7 +40,15 @@ jobs:
       - name: test
         run: npm run test -- --coverage
       - name: bench smoke (routing overhead)
-        run: npm run bench:overhead || true
+        run: npm run bench:overhead
+      - name: bench smoke (throughput short phase)
+        env:
+          BENCH_PHASE_SECONDS: "10"
+          BENCH_SUSTAIN_RPS: "100"
+          BENCH_BURST_RPS: "500"
+        run: npm run bench:throughput
+      - name: audit secrets
+        run: node scripts/audit-secrets.mjs
 
   provider-core-boundary:
     name: no cross-package leakage

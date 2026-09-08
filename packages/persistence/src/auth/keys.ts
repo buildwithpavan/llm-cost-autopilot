@@ -64,6 +64,9 @@ export async function verifyApiKey(
   presentedSecret: string,
 ): Promise<{ keyId: string; clientId: string } | null> {
   if (!presentedSecret.startsWith(SECRET_PREFIX)) return null;
+  const cached = verifyCacheGet(presentedSecret);
+  if (cached) return cached;
+
   const tail = presentedSecret.slice(SECRET_PREFIX.length);
   const idPart = tail.split("_")[0];
   if (!idPart) return null;
@@ -80,13 +83,66 @@ export async function verifyApiKey(
   const ok = await verify(row.hashed_secret, presentedSecret);
   if (!ok) return null;
 
-  await db
+  const identity = { keyId: row.key_id, clientId: row.client_id };
+  verifyCachePut(presentedSecret, identity);
+
+  // Fire-and-forget last_used_at update. Not critical for the request path.
+  db
     .updateTable("api_keys")
     .set({ last_used_at: new Date() })
     .where("key_id", "=", keyId)
-    .execute();
+    .execute()
+    .catch(() => { /* logged elsewhere */ });
 
-  return { keyId: row.key_id, clientId: row.client_id };
+  return identity;
+}
+
+/**
+ * Small in-memory LRU cache of successful Argon2 verifications.
+ * Argon2id is intentionally slow (~100ms) which caps single-thread throughput;
+ * caching successful verifications lets the request path stay under Principle X
+ * budgets without weakening at-rest security.
+ *
+ * Revocation is enforced by `revokeApiKey` calling `invalidateVerifyCache`.
+ */
+const VERIFY_CACHE_MAX = 4096;
+const VERIFY_CACHE_TTL_MS = 60_000;
+type CachedIdentity = { keyId: string; clientId: string; expiresAt: number };
+const verifyCache = new Map<string, CachedIdentity>();
+
+function verifyCacheGet(presentedSecret: string): { keyId: string; clientId: string } | null {
+  const hit = verifyCache.get(presentedSecret);
+  if (!hit) return null;
+  if (hit.expiresAt < Date.now()) {
+    verifyCache.delete(presentedSecret);
+    return null;
+  }
+  return { keyId: hit.keyId, clientId: hit.clientId };
+}
+
+function verifyCachePut(
+  presentedSecret: string,
+  identity: { keyId: string; clientId: string },
+): void {
+  if (verifyCache.size >= VERIFY_CACHE_MAX) {
+    const firstKey = verifyCache.keys().next().value;
+    if (firstKey !== undefined) verifyCache.delete(firstKey);
+  }
+  verifyCache.set(presentedSecret, {
+    keyId: identity.keyId,
+    clientId: identity.clientId,
+    expiresAt: Date.now() + VERIFY_CACHE_TTL_MS,
+  });
+}
+
+export function invalidateVerifyCache(keyId?: string): void {
+  if (!keyId) {
+    verifyCache.clear();
+    return;
+  }
+  for (const [k, v] of verifyCache.entries()) {
+    if (v.keyId === keyId) verifyCache.delete(k);
+  }
 }
 
 export async function revokeApiKey(db: Db, keyId: string): Promise<void> {
@@ -96,6 +152,7 @@ export async function revokeApiKey(db: Db, keyId: string): Promise<void> {
     .where("key_id", "=", keyId)
     .where("revoked_at", "is", null)
     .execute();
+  invalidateVerifyCache(keyId);
 }
 
 export async function listApiKeyMetadata(db: Db): Promise<ApiKeyMetadata[]> {
