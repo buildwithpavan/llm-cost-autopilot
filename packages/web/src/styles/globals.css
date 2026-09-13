@@ -1,0 +1,169 @@
+@import "./tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings:
+    "cv02" 1,
+    "cv11" 1,
+    "ss03" 1;
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: auto;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+svg {
+  display: block;
+}
+
+/* Utility: mono text --------------------------------------------------------- */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Active-edge dash flow ------------------------------------------------------ */
+.lca-flow-edge {
+  animation: lca-flow-dash 900ms linear infinite;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+@keyframes lca-flow-dash {
+  from {
+    stroke-dashoffset: 14;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Neon glow — for active nodes and terminals -------------------------------- */
+.lca-glow-accent {
+  box-shadow:
+    0 0 0 1px rgba(99, 110, 255, 0.35),
+    0 0 14px rgba(99, 110, 255, 0.35),
+    inset 0 0 8px rgba(99, 110, 255, 0.14);
+}
+
+.lca-glow-cyan {
+  box-shadow:
+    0 0 0 1px rgba(71, 209, 209, 0.35),
+    0 0 12px rgba(71, 209, 209, 0.28),
+    inset 0 0 6px rgba(71, 209, 209, 0.14);
+}
+
+.lca-glow-success {
+  box-shadow:
+    0 0 0 1px rgba(38, 214, 138, 0.4),
+    0 0 14px rgba(38, 214, 138, 0.35),
+    inset 0 0 8px rgba(38, 214, 138, 0.16);
+}
+
+.lca-glow-error {
+  box-shadow:
+    0 0 0 1px rgba(242, 89, 89, 0.45),
+    0 0 12px rgba(242, 89, 89, 0.35),
+    inset 0 0 6px rgba(242, 89, 89, 0.14);
+}
+
+.lca-glow-warn {
+  box-shadow:
+    0 0 0 1px rgba(242, 171, 71, 0.4),
+    0 0 12px rgba(242, 171, 71, 0.28),
+    inset 0 0 6px rgba(242, 171, 71, 0.14);
+}
+
+/* Traveling request-flow particle -------------------------------------------- */
+.lca-motion-particle {
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+/* Node pulse — subtle breathing on live stages ------------------------------ */
+.lca-pulse-accent {
+  animation: lca-pulse-accent 2400ms ease-in-out infinite;
+}
+
+@keyframes lca-pulse-accent {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(99, 110, 255, 0.28),
+      0 0 10px rgba(99, 110, 255, 0.24);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(99, 110, 255, 0.5),
+      0 0 18px rgba(99, 110, 255, 0.42);
+  }
+}
+
+/* Winner orbit ring --------------------------------------------------------- */
+.lca-orbit-ring {
+  animation: lca-orbit 6000ms linear infinite;
+}
+
+@keyframes lca-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Reduced-motion opt-out ----------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .lca-flow-edge {
+    animation: none !important;
+    filter: none !important;
+  }
+  .lca-pulse-accent {
+    animation: none !important;
+  }
+  .lca-orbit-ring {
+    animation: none !important;
+  }
+  .lca-motion-particle {
+    display: none !important;
+  }
+}

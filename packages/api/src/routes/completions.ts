@@ -19,10 +19,12 @@ import type { OperatorRuleStore, TelemetryWriter } from "@lca/persistence";
 
 import { loadCatalogSnapshot, type AppContext, type CatalogSnapshot } from "../wiring.js";
 import { LcaError } from "../plugins/errors.js";
+import { sharedStreamBus, type TelemetryStreamBus } from "../plugins/stream-bus.js";
 
 export interface CompletionsDeps extends AppContext {
   telemetryWriter: TelemetryWriter;
   ruleStore?: OperatorRuleStore;
+  streamBus?: TelemetryStreamBus;
 }
 
 interface CompletionResponseBody extends NormalizedResponse {
@@ -79,6 +81,8 @@ function validatePinAgainstCatalog(
 }
 
 const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
+  const bus = deps.streamBus ?? sharedStreamBus;
+
   fastify.post("/v1/completions", async (req, reply) => {
     const parsed = completionRequestSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -92,11 +96,31 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
 
     const normalized = normalize(parsed.data, req);
     const eventId = makeEventId(normalized.requestId);
+
+    bus.publish({
+      eventType: "request.received",
+      eventId,
+      clientId: normalized.clientId,
+      timestamp: normalized.receivedAt,
+      estimatedInputTokens: normalized.estimatedInputTokens,
+      requiredCapabilities: normalized.requirements.requiredCapabilities,
+    });
+
     const snapshot = await loadCatalogSnapshot(deps);
 
     // Resolve override precedence (operator > client > autopilot).
     const rules = deps.ruleStore ? await deps.ruleStore.snapshot() : [];
     const resolution = coreOverrides.resolveOverride({ request: normalized, rules });
+
+    bus.publish({
+      eventType: "governance.completed",
+      eventId,
+      clientId: normalized.clientId,
+      timestamp: new Date().toISOString(),
+      decisionSource: resolution.effectiveSource,
+      shadowedSource: resolution.shadowedSource,
+      matchedRuleId: resolution.matchedRuleId ?? null,
+    });
 
     let decision: RoutingDecision;
     if (resolution.pin) {
@@ -168,6 +192,33 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
       });
     }
 
+    bus.publish({
+      eventType: "decision.committed",
+      eventId,
+      clientId: normalized.clientId,
+      timestamp: new Date().toISOString(),
+      decision,
+    });
+    for (const candidate of decision.candidateRanking) {
+      if (candidate.included) {
+        bus.publish({
+          eventType: "candidate.evaluated",
+          eventId,
+          clientId: normalized.clientId,
+          timestamp: new Date().toISOString(),
+          candidate,
+        });
+      } else {
+        bus.publish({
+          eventType: "candidate.excluded",
+          eventId,
+          clientId: normalized.clientId,
+          timestamp: new Date().toISOString(),
+          candidate,
+        });
+      }
+    }
+
     const requestStart = Date.now();
     const controller = new AbortController();
     const fallbackOutcome = await routing.executeWithFallback({
@@ -175,25 +226,42 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
       decision,
       pricingTable: snapshot.pricingTable,
       execute: async ({ providerId, modelId, attemptIndex }) => {
+        bus.publish({
+          eventType: "execution.started",
+          eventId,
+          clientId: normalized.clientId,
+          timestamp: new Date().toISOString(),
+          attemptIndex,
+          providerId,
+          modelId,
+        });
         const targetAdapter = deps.registry.get(providerId);
         if (!targetAdapter) {
           const now = new Date().toISOString();
+          const failedAttempt = {
+            attemptIndex,
+            providerId,
+            modelId,
+            startedAt: now,
+            endedAt: now,
+            latencyMs: 0,
+            inputTokens: null,
+            outputTokens: null,
+            errorClass: "provider_unavailable" as const,
+            estimatedCostUsd: "0",
+            actualCostUsd: null,
+            pricingTableVersionId: snapshot.pricingTable.versionId,
+          };
+          bus.publish({
+            eventType: "execution.completed",
+            eventId,
+            clientId: normalized.clientId,
+            timestamp: new Date().toISOString(),
+            attempt: failedAttempt,
+          });
           return {
             kind: "failure" as const,
-            attempt: {
-              attemptIndex,
-              providerId,
-              modelId,
-              startedAt: now,
-              endedAt: now,
-              latencyMs: 0,
-              inputTokens: null,
-              outputTokens: null,
-              errorClass: "provider_unavailable" as const,
-              estimatedCostUsd: "0",
-              actualCostUsd: null,
-              pricingTableVersionId: snapshot.pricingTable.versionId,
-            },
+            attempt: failedAttempt,
           };
         }
         const outcome = await targetAdapter.execute(
@@ -206,16 +274,32 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
           controller.signal,
         );
         if (outcome.kind === "success") {
+          const attempt = { ...outcome.attempt, attemptIndex };
+          bus.publish({
+            eventType: "execution.completed",
+            eventId,
+            clientId: normalized.clientId,
+            timestamp: new Date().toISOString(),
+            attempt,
+          });
           return {
             kind: "success" as const,
             content: outcome.content,
             finishReason: outcome.finishReason,
-            attempt: { ...outcome.attempt, attemptIndex },
+            attempt,
           };
         }
+        const attempt = { ...outcome.attempt, attemptIndex };
+        bus.publish({
+          eventType: "execution.completed",
+          eventId,
+          clientId: normalized.clientId,
+          timestamp: new Date().toISOString(),
+          attempt,
+        });
         return {
           kind: "failure" as const,
-          attempt: { ...outcome.attempt, attemptIndex },
+          attempt,
         };
       },
     });
@@ -236,6 +320,21 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
 
     if (fallbackOutcome.finalResult.kind !== "success") {
       const failedAttempt = fallbackOutcome.finalResult.attempt;
+      bus.publish({
+        eventType: "result.failed",
+        eventId,
+        clientId: normalized.clientId,
+        timestamp: new Date().toISOString(),
+        totalLatencyMs,
+        terminalErrorClass: fallbackOutcome.terminalErrorClass,
+      });
+      bus.publish({
+        eventType: "event.completed",
+        eventId,
+        clientId: normalized.clientId,
+        timestamp: new Date().toISOString(),
+        event: redactedEvent,
+      });
       throw new LcaError({
         httpStatus: 502,
         code: fallbackOutcome.terminalErrorClass,
@@ -243,6 +342,22 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
         details: { attempts: fallbackOutcome.attempts, totalLatencyMs },
       });
     }
+
+    bus.publish({
+      eventType: "result.completed",
+      eventId,
+      clientId: normalized.clientId,
+      timestamp: new Date().toISOString(),
+      totalLatencyMs,
+      terminalErrorClass: "none",
+    });
+    bus.publish({
+      eventType: "event.completed",
+      eventId,
+      clientId: normalized.clientId,
+      timestamp: new Date().toISOString(),
+      event: redactedEvent,
+    });
 
     const successAttempt = fallbackOutcome.finalResult.attempt;
     const body: CompletionResponseBody = {

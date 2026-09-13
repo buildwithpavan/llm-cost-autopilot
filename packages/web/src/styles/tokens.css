@@ -1,0 +1,73 @@
+/* --------------------------------------------------------------------------
+   LLM Cost Autopilot · design tokens
+   Sourced verbatim from Figma node 44:3 ("02 Reference Match")
+   -------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces --------------------------------------------------------------- */
+  --bg-canvas: #070c10;
+  --bg-panel: #090e12;
+  --bg-card: #0c1115;
+  --bg-inset: #0a0f14;
+  --bg-highlight: #171442; /* routing engine hero */
+  --bg-nav-active: #1a1f47; /* top nav active pill */
+  --bg-side-active: #1f1f61; /* sidebar active pill */
+  --bg-tab-active: #1c246b; /* accent tab */
+  --bg-live-pill: #081a17;
+  --bg-env-pill: #0a1217;
+  --bg-result: #081a14;
+  --bg-score-chip: #144033;
+  --bg-track: #141c24;
+
+  /* Borders ---------------------------------------------------------------- */
+  --border-default: #1c262e;
+  --border-muted: #94a1b2;
+  --border-accent: #636eff;
+  --border-success: #26d68a;
+  --border-error: #f25959;
+
+  /* Text ------------------------------------------------------------------- */
+  --text-primary: #edf2fa;
+  --text-secondary: #94a1b2;
+  --text-tertiary: #637080;
+
+  /* Accents ---------------------------------------------------------------- */
+  --accent-primary: #636eff;
+  --accent-cyan: #47d1d1;
+  --accent-blue: #4085ff;
+  --accent-purple: #6b47ff;
+  --accent-teal: #596bff;
+  --logo-blue: #3385ff;
+
+  /* Semantics -------------------------------------------------------------- */
+  --success: #26d68a;
+  --warn: #f2ab47;
+  --error: #f25959;
+
+  /* Radii ------------------------------------------------------------------ */
+  --r-chip: 5px;
+  --r-tab: 6px;
+  --r-mini: 6px;
+  --r-card: 8px;
+  --r-hero: 10px;
+
+  /* Typography ------------------------------------------------------------- */
+  --font-sans:
+    "Inter", -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+
+  /* Layout metrics from Figma --------------------------------------------- */
+  --topbar-h: 56px;
+  --sidebar-w: 154px;
+  --frame-w: 1536px;
+  --frame-h: 1024px;
+
+  /* Motion ---------------------------------------------------------------- */
+  --dur-1: 80ms;
+  --dur-2: 200ms;
+  --dur-3: 400ms;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}

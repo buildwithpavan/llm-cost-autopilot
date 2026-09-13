@@ -1,0 +1,7 @@
+.next/
+next-env.d.ts.timestamp-*
+out/
+node_modules/
+.env.local
+.env*.local
+tsconfig.tsbuildinfo

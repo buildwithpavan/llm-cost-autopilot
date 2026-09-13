@@ -16,8 +16,10 @@ import catalogRoute from "./routes/catalog.js";
 import telemetryEventsRoute from "./routes/telemetry-events.js";
 import telemetryRollupsRoute from "./routes/telemetry-rollups.js";
 import telemetryReplayRoute from "./routes/telemetry-replay.js";
+import telemetryStreamRoute from "./routes/telemetry-stream.js";
 import rulesRoute from "./routes/rules.js";
 import keysRoute from "./routes/keys.js";
+import devMockRoute from "./routes/dev-mock.js";
 
 export interface ServerDeps {
   config: LcaConfig;
@@ -52,6 +54,26 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
 
   app.setErrorHandler(errorHandler);
 
+  // Permissive CORS for development. Production deploys should front the API
+  // with a gateway that enforces origin allowlisting.
+  const corsAllow = deps.config.NODE_ENV !== "production";
+  if (corsAllow) {
+    app.addHook("onRequest", async (req, reply) => {
+      const origin = req.headers.origin;
+      if (origin) {
+        reply.header("access-control-allow-origin", origin);
+        reply.header("access-control-allow-credentials", "true");
+        reply.header("access-control-allow-headers", "authorization, content-type, x-request-id");
+        reply.header("access-control-allow-methods", "GET, POST, PATCH, DELETE, OPTIONS");
+        reply.header("access-control-expose-headers", "x-request-id");
+      }
+      if (req.method === "OPTIONS") {
+        reply.header("access-control-max-age", "86400");
+        return reply.status(204).send();
+      }
+    });
+  }
+
   app.get("/metrics", async (_req, reply) => {
     reply.header("content-type", metrics.registry.contentType);
     return metrics.registry.metrics();
@@ -75,10 +97,15 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   await app.register(telemetryEventsRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryRollupsRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryReplayRoute, { db: deps.db, registry: deps.registry });
+  await app.register(telemetryStreamRoute, { db: deps.db, registry: deps.registry });
   if (deps.ruleStore) {
     await app.register(rulesRoute, { ruleStore: deps.ruleStore });
   }
   await app.register(keysRoute, { db: deps.db });
+
+  if (deps.config.NODE_ENV !== "production") {
+    await app.register(devMockRoute, { db: deps.db, registry: deps.registry });
+  }
 
   app.addHook("onSend", async (req, reply) => {
     reply.header("x-request-id", String(req.id));

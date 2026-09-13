@@ -1,0 +1,77 @@
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+  padding: 0 4px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 694px) minmax(0, 654px);
+  gap: 12px;
+  align-items: start;
+  padding: 0 4px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 8px;
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 60vh;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--accent-primary);
+  animation: lca-spin 800ms linear infinite;
+}
+
+@keyframes lca-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.fixtureBanner {
+  margin: 10px 4px 0;
+  padding: 8px 12px;
+  border-radius: var(--r-tab);
+  background: rgba(245, 171, 71, 0.08);
+  border: 1px solid rgba(245, 171, 71, 0.3);
+  color: var(--warn);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fixtureDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.fixtureBanner code {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 4px;
+  border-radius: 3px;
+}

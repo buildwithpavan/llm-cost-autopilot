@@ -1,0 +1,35 @@
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-card);
+  padding: 12px 16px;
+  min-height: 62px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.status {
+  font-size: 9px;
+  color: var(--text-secondary);
+}
+
+.line {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 7px;
+  color: var(--success);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

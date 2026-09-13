@@ -1,0 +1,42 @@
+.strip {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-card);
+  padding: 12px 16px;
+  min-height: 82px;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  column-gap: 8px;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.label {
+  font-size: 8px;
+  color: var(--text-secondary);
+}
+
+.value {
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

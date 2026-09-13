@@ -56,9 +56,10 @@ export function createMockAdapter(opts: MockAdapterOptions): ProviderAdapter {
     opts.models ??
     (opts.providerId === "mock-fast" ? DEFAULT_MODELS_FAST : DEFAULT_MODELS_CHEAP);
   let failsRemaining = opts.failFirstWith ? 1 : 0;
+  let armedFailure: ErrorClass | null = null;
   const state = { forceUnhealthy: opts.forceUnhealthy ?? false };
 
-  return {
+  const adapter: ProviderAdapter = {
     providerId: opts.providerId,
     listModels() {
       return models;
@@ -76,6 +77,11 @@ export function createMockAdapter(opts: MockAdapterOptions): ProviderAdapter {
       // Respect abort signal
       if (signal.aborted) {
         return failure(input, opts.providerId, startedAt, "timeout");
+      }
+      if (armedFailure && armedFailure !== "none") {
+        const errClass = armedFailure;
+        armedFailure = null;
+        return failure(input, opts.providerId, startedAt, errClass);
       }
       if (failsRemaining > 0 && opts.failFirstWith && opts.failFirstWith !== "none") {
         failsRemaining--;
@@ -115,6 +121,15 @@ export function createMockAdapter(opts: MockAdapterOptions): ProviderAdapter {
       };
     },
   };
+
+  // Attach a dev/test-only handle so the API can arm a single failure on demand.
+  Object.defineProperty(adapter, "__mockArmFailure", {
+    value: (errClass: ErrorClass) => {
+      armedFailure = errClass;
+    },
+    enumerable: false,
+  });
+  return adapter;
 }
 
 function deriveOutputTokens(req: NormalizedRequest): number {
@@ -156,6 +171,19 @@ function failure(
 export function markMockUnhealthy(adapter: ProviderAdapter, unhealthy: boolean): void {
   const target = adapter as unknown as { __mock?: { setUnhealthy(v: boolean): void } };
   target.__mock?.setUnhealthy(unhealthy);
+}
+
+/**
+ * Dev/test helper: arm the next execute() to return `errorClass` instead of
+ * running the mock logic. Consumes one failure and resets. No-op for non-mock
+ * adapters. Used by the /v1/dev/mock/arm-failure endpoint so a demo can produce
+ * a real fallback chain on demand.
+ */
+export function armMockFailure(adapter: ProviderAdapter, errClass: ErrorClass): boolean {
+  const target = adapter as unknown as { __mockArmFailure?: (e: ErrorClass) => void };
+  if (typeof target.__mockArmFailure !== "function") return false;
+  target.__mockArmFailure(errClass);
+  return true;
 }
 
 /** Convenience: create both mock providers used by quickstart + tests. */

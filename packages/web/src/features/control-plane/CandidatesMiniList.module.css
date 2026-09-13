@@ -1,0 +1,153 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 10px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  height: 100%;
+  overflow: hidden;
+}
+
+.heading {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+  padding-left: 2px;
+}
+
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto 14px;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  border-radius: var(--r-mini);
+  border: 1px solid transparent;
+  background: var(--bg-inset);
+  min-height: 44px;
+  transition:
+    box-shadow 200ms ease,
+    border-color 200ms ease,
+    transform 200ms ease;
+}
+
+.accentBar {
+  width: 3px;
+  height: 28px;
+  border-radius: 2px;
+  align-self: center;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.winner {
+  border-color: var(--row-accent);
+  background: color-mix(in srgb, var(--row-accent) 12%, var(--bg-inset));
+  box-shadow: inset 0 0 10px color-mix(in srgb, var(--row-accent) 22%, transparent);
+}
+
+/* Particle has arrived at the model-selection stage — intensify the winner. */
+.selectedActive {
+  transform: scale(1.035);
+  box-shadow:
+    0 0 0 1px var(--row-accent),
+    0 0 16px color-mix(in srgb, var(--row-accent) 55%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--row-accent) 26%, transparent);
+  animation: lca-row-breathe 1500ms ease-in-out infinite;
+}
+
+@keyframes lca-row-breathe {
+  0%, 100% { filter: brightness(1.02); }
+  50% { filter: brightness(1.22); }
+}
+
+.runner {
+  border-color: var(--border-muted);
+}
+.excluded {
+  border-color: var(--border-error);
+  background: rgba(242, 89, 89, 0.06);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.model {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+/* The selected model name is the strongest text element in the candidate area. */
+.winner .model {
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.provider {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* WINNER badge centred directly above the score (out of flow, so it never
+   widens the column or truncates the model name). */
+.winnerTag {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 4px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: rgba(251, 191, 36, 0.18);
+  border: 1px solid rgba(251, 191, 36, 0.6);
+  color: #fbbf24;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.reason {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.value {
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

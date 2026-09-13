@@ -1,0 +1,674 @@
+/* --------------------------------------------------------------------------
+   Decision Graph — pipeline-rail composition
+   -------------------------------------------------------------------------- */
+
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-card);
+  padding: 14px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+}
+
+.head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 12px;
+  padding: 0 4px;
+}
+
+.title {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.tab {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--r-tab);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+}
+
+.tabActive {
+  background: var(--bg-tab-active);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* --- Hero graph area ----------------------------------------------------- */
+
+.graphWrap {
+  padding: 4px 16px 12px;
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(99, 110, 255, 0.06), transparent 60%),
+    var(--bg-canvas);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-card);
+}
+
+.graphInner {
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  aspect-ratio: 1060 / 520;
+}
+
+.zoneLabel {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  text-align: left;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.branchReason {
+  position: absolute;
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
+  pointer-events: none;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.reasonFail {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--error);
+}
+.reasonMuted {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+.reasonText {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* --- Stage badges (circular) --------------------------------------------- */
+
+.badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-default);
+  background: var(--bg-inset);
+  pointer-events: none;
+  transition:
+    box-shadow var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    opacity var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease);
+}
+
+.badgeActive {
+  transform: scale(1.18);
+  z-index: 3;
+  animation: lca-badge-breathe 1600ms ease-in-out infinite;
+}
+
+.badgeActive::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--stage-tint);
+  opacity: 0.6;
+  animation: lca-badge-halo 1500ms ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes lca-badge-halo {
+  0% {
+    transform: scale(0.82);
+    opacity: 0.65;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+@keyframes lca-badge-breathe {
+  0%, 100% {
+    filter: brightness(1.05);
+  }
+  50% {
+    filter: brightness(1.35);
+  }
+}
+
+.badgeUpcoming {
+  opacity: 0.32;
+}
+
+.badgeComplete {
+  opacity: 0.82;
+}
+
+.badgeHighlight {
+  box-shadow:
+    0 0 0 1px rgba(99, 110, 255, 0.5),
+    0 0 16px rgba(99, 110, 255, 0.4);
+}
+
+.badgeDim {
+  opacity: 0.5;
+}
+
+.badgeFailed {
+  box-shadow:
+    0 0 0 1px rgba(242, 89, 89, 0.5),
+    0 0 12px rgba(242, 89, 89, 0.3);
+}
+
+.badgeTerminalOk {
+  box-shadow:
+    0 0 0 1px rgba(38, 214, 138, 0.55),
+    0 0 18px rgba(38, 214, 138, 0.45),
+    inset 0 0 8px rgba(38, 214, 138, 0.2);
+}
+
+.badgeTerminalFail {
+  box-shadow:
+    0 0 0 1px rgba(242, 89, 89, 0.55),
+    0 0 18px rgba(242, 89, 89, 0.45),
+    inset 0 0 8px rgba(242, 89, 89, 0.2);
+}
+
+/* --- Stage label (above badge) ------------------------------------------- */
+
+.stageLabel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transform: translateY(-2px);
+  pointer-events: none;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+}
+
+.stageStep {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-tertiary);
+}
+
+.stageTitle {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text-primary);
+}
+
+/* --- Stage chip (below badge, contextual info) --------------------------- */
+
+.stageChip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 6px;
+  pointer-events: none;
+  text-align: center;
+}
+
+.stageChipTitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.stageChipMono {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--accent-cyan);
+}
+
+.stageChipMuted {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-tertiary);
+}
+
+/* Small pill annotations under a stage chip (fallback / bypass semantics). */
+.stageChipTag {
+  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.stageChipFallback {
+  background: rgba(251, 146, 60, 0.14);
+  border: 1px solid rgba(251, 146, 60, 0.5);
+  color: #fb923c;
+}
+
+.stageChipBypass {
+  background: rgba(192, 132, 252, 0.14);
+  border: 1px solid rgba(192, 132, 252, 0.5);
+  color: #c084fc;
+}
+
+/* --- Shadowed-override floater ------------------------------------------- */
+
+.shadowedFloater {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(242, 171, 71, 0.12);
+  border: 1px solid rgba(242, 171, 71, 0.45);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--warn);
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 0 8px rgba(242, 171, 71, 0.2);
+}
+
+/* --- Candidate cards ------------------------------------------------------ */
+
+/* Positioned branch chip hosting a shared CandidateRow. */
+.branchChip {
+  pointer-events: none;
+  display: flex;
+  align-items: stretch;
+}
+.branchChip > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.branchHeading {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Decision cluster hosting the shared CandidatesMiniList. */
+.candidatesPanel {
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+.candCard {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  overflow: hidden;
+  transition:
+    border-color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
+}
+
+.candWinner {
+  border-color: color-mix(in srgb, var(--model-accent) 60%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--model-accent) 10%, transparent), transparent),
+    var(--bg-card);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--model-accent) 32%, transparent),
+    0 0 22px color-mix(in srgb, var(--model-accent) 24%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.candSelected {
+  box-shadow:
+    0 0 0 1.5px var(--model-accent),
+    0 0 28px color-mix(in srgb, var(--model-accent) 50%, transparent),
+    inset 0 0 16px color-mix(in srgb, var(--model-accent) 24%, transparent);
+  animation: lca-badge-breathe 1600ms ease-in-out infinite;
+  z-index: 3;
+}
+
+.candRunner {
+  border-color: var(--border-muted);
+  opacity: 0.92;
+}
+
+.candExcluded {
+  border-color: var(--border-error);
+  border-style: dashed;
+  background: linear-gradient(180deg, rgba(242, 89, 89, 0.05), transparent), var(--bg-card);
+  opacity: 0.85;
+}
+
+.candHead {
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.candAccentBar {
+  width: 4px;
+  height: 34px;
+  border-radius: 3px;
+  align-self: center;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.candIdentity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.candModelName {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+}
+
+.candProviderLine {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.candProviderName {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.candProviderDot {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.candProviderKind {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.candRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.candBadgeWinner,
+.candBadgeRunner,
+.candBadgeExcluded {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.candBadgeWinner {
+  background: color-mix(in srgb, var(--model-accent) 20%, transparent);
+  color: var(--model-accent);
+  border: 1px solid color-mix(in srgb, var(--model-accent) 55%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--model-accent) 35%, transparent);
+}
+
+.candBadgeRunner {
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.candBadgeExcluded {
+  background: rgba(242, 89, 89, 0.12);
+  color: var(--error);
+  border: 1px solid rgba(242, 89, 89, 0.5);
+}
+
+.candScore {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.candFactorRow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.candFactorPip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.candFactorLabel {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  min-width: 9px;
+}
+
+.candFactorBar {
+  position: relative;
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg-track);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.candFactorBarFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  box-shadow: 0 0 4px currentColor;
+}
+
+.candReason {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--error);
+  margin-top: 2px;
+}
+
+.winnerFallbackTag {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(242, 171, 71, 0.15);
+  color: var(--warn);
+  border: 1px solid rgba(242, 171, 71, 0.5);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* --- Attempts strip ------------------------------------------------------- */
+
+.attempts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px 2px;
+  flex-wrap: wrap;
+}
+
+.attemptOk,
+.attemptFailed {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--r-tab);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-primary);
+}
+
+.attemptOk {
+  border-color: var(--success);
+  box-shadow: 0 0 8px rgba(38, 214, 138, 0.18);
+}
+
+.attemptFailed {
+  border-color: var(--error);
+  color: var(--error);
+  box-shadow: 0 0 8px rgba(242, 89, 89, 0.2);
+}
+
+.attemptRank {
+  font-size: 9px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.1em;
+}
+
+.attemptDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+  flex-shrink: 0;
+}
+
+.attemptModel {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.attemptFailed .attemptModel {
+  color: var(--error);
+}
+
+.attemptMeta {
+  color: var(--text-secondary);
+}
+
+.fallbackChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--r-tab);
+  background: rgba(242, 171, 71, 0.1);
+  border: 1px solid rgba(242, 171, 71, 0.4);
+  font-size: 10px;
+  color: var(--warn);
+  font-family: var(--font-mono);
+}
+
+/* --- Bottom row (Trace + Details) ---------------------------------------- */
+
+.bottomRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 12px;
+  padding: 6px 8px 0;
+  align-items: start;
+}
+
+@media (max-width: 1080px) {
+  .bottomRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

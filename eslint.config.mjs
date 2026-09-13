@@ -12,7 +12,7 @@ const noVendorEverywhere = ["error", { paths: vendorSdkPaths }];
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
-  { ignores: ["**/dist/**", "**/node_modules/**", "**/coverage/**", "**/*.cjs", "**/*.mjs"] },
+  { ignores: ["**/dist/**", "**/node_modules/**", "**/coverage/**", "**/*.cjs", "**/*.mjs", "packages/web/**"] },
   js.configs.recommended,
   {
     files: ["packages/**/*.ts"],
@@ -35,6 +35,8 @@ export default [
         BodyInit: "readonly",
         URLSearchParams: "readonly",
         structuredClone: "readonly",
+        TextEncoder: "readonly",
+        TextDecoder: "readonly",
       },
     },
     plugins: { "@typescript-eslint": tsPlugin, import: importPlugin },

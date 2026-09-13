@@ -1,0 +1,18 @@
+.root {
+  min-height: 100vh;
+  min-width: min(var(--frame-w), 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-canvas);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: calc(100vh - var(--topbar-h));
+}
+
+.main {
+  padding: 12px 12px 12px 10px;
+  min-height: calc(100vh - var(--topbar-h));
+}

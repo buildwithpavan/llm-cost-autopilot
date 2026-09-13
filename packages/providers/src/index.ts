@@ -1,5 +1,5 @@
 export * from "./abstraction/index.js";
-export { createMockAdapter, createDefaultMockPair, createMockFromEnv } from "./mock/adapter.js";
+export { createMockAdapter, createDefaultMockPair, createMockFromEnv, armMockFailure } from "./mock/adapter.js";
 export type { MockAdapterOptions } from "./mock/adapter.js";
 export { createOpenAiAdapter } from "./openai/adapter.js";
 export type { OpenAiAdapterOptions } from "./openai/adapter.js";

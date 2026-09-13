@@ -5,6 +5,7 @@ import { defineWorkspace } from "vitest/config";
 export default defineWorkspace([
   {
     test: {
+      name: "backend",
       include: [
         "packages/core/test/**/*.test.ts",
         "packages/providers/test/**/*.test.ts",
@@ -19,4 +20,5 @@ export default defineWorkspace([
       fileParallelism: false,
     },
   },
+  "packages/web/vitest.config.ts",
 ]);
