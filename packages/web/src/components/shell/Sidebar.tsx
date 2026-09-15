@@ -7,8 +7,7 @@ type NavItem = { key: string; label: string; glyph: ReactNode };
 const MAIN: NavItem[] = [
   { key: "Overview", label: "Overview", glyph: "⌂" },
   { key: "Requests", label: "Requests", glyph: "⇄" },
-  { key: "Routing", label: "Routing", glyph: "≋" },
-  { key: "Models", label: "Models", glyph: "◈" },
+  { key: "Routing", label: "Routing", glyph: "≋" },  { key: "Traffic", label: "Routing Explorer", glyph: "⇉" },  { key: "Models", label: "Models", glyph: "◈" },
   { key: "Governance", label: "Governance", glyph: "◌" },
   { key: "Cost", label: "Cost", glyph: "◫" },
   { key: "Observability", label: "Observability", glyph: "◉" },

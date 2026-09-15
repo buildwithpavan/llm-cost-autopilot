@@ -59,3 +59,29 @@ export function formatDelta(startedAt: string, at: string): string {
   const d = Math.max(0, Math.round(t1 - t0));
   return `${d} ms`;
 }
+
+/** 24h clock time, e.g. "14:32:08". */
+export function formatClockTime(iso: string): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "—";
+  return new Date(t).toLocaleTimeString("en-US", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+/** Compact relative time, e.g. "just now", "3s ago", "5m ago", "2h ago", "4d ago". */
+export function formatRelativeTime(iso: string, now: number = Date.now()): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "—";
+  const s = Math.floor(Math.max(0, now - t) / 1000);
+  if (s < 1) return "just now";
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}

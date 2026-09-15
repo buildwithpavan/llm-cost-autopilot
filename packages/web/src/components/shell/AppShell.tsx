@@ -6,19 +6,21 @@ import type { StreamConnectionState } from "../../lib/sse/connect-stream.js";
 import styles from "./AppShell.module.css";
 
 const NAV_TOP_KEY = "Routing" as const;
-const NAV_SIDE_KEY = "Routing" as const;
+const NAV_SIDE_KEY = "Routing";
 
 export function AppShell({
   connection,
   envLabel,
   healthy,
   version,
+  activeKey = NAV_SIDE_KEY,
   children,
 }: {
   connection: StreamConnectionState;
   envLabel: string;
   healthy: boolean;
   version: string;
+  activeKey?: string;
   children: ReactNode;
 }) {
   return (
@@ -31,7 +33,7 @@ export function AppShell({
         userHandle="Pavan"
       />
       <div className={styles.body}>
-        <Sidebar activeKey={NAV_SIDE_KEY} healthy={healthy} version={version} />
+        <Sidebar activeKey={activeKey} healthy={healthy} version={version} />
         <main className={styles.main}>{children}</main>
       </div>
     </div>
