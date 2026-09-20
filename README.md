@@ -6,7 +6,7 @@ The autopilot accepts a chat/completion request, normalizes it, deterministicall
 
 ## Status
 
-Backend MVP delivered end-to-end. All 111 tasks in [specs/001-llm-routing-mvp/tasks.md](specs/001-llm-routing-mvp/tasks.md) complete. Test suite: 130+ tests across the workspace, DB-backed integration included. Frontend has not been started.
+Backend MVP delivered end-to-end. All 111 tasks in [specs/001-llm-routing-mvp/tasks.md](specs/001-llm-routing-mvp/tasks.md) complete. Test suite: 130+ tests across the workspace, DB-backed integration included. A Next.js frontend (`@lca/web`) is under active development.
 
 ## Stack
 
@@ -31,6 +31,7 @@ packages/
   persistence/    @lca/persistence   – Postgres access: schema, migrations, telemetry writer/rollups/retention, auth, catalog, health
   api/            @lca/api           – Fastify HTTP entrypoint (thin shell)
   cli/            @lca/cli           – `lca` command-line (mirrors API)
+  web/            @lca/web           – Next.js frontend (dashboard, routing explorer, request detail)
 db/
   migrations/     versioned SQL schema migrations
   seeds/pricing/  versioned pricing snapshots
@@ -98,6 +99,7 @@ All non-`/v1/health` routes require `Authorization: Bearer <api_key>`. The canon
 | `GET /v1/telemetry/events` | Query full-fidelity telemetry (cursor pagination) |
 | `GET /v1/telemetry/rollups` | Query daily rollups (12-month window) |
 | `GET /v1/telemetry/replay/{eventId}` | Reproduce a stored routing decision (no provider call) |
+| `GET /v1/telemetry/events/stream` | Server-Sent Events stream of live telemetry |
 | `GET \| POST /v1/operator/rules` | List / create operator routing rules |
 | `PATCH \| DELETE /v1/operator/rules/{ruleId}` | Update / remove a rule |
 | `GET \| POST \| DELETE /v1/keys[/{keyId}]` | Manage API keys (plaintext secret returned only on create) |
