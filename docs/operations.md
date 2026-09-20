@@ -27,6 +27,7 @@ Configuration is loaded by [packages/api/src/config.ts](../packages/api/src/conf
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string. |
 | `PORT` | no (8080) | HTTP port. |
+| `NODE_ENV` | no (`development`) | Set to `production` in production. When not `production`, the API enables permissive dev CORS and registers the dev-only `POST /v1/dev/mock/arm-failure` route. The Docker image sets it to `production`. |
 | `LCA_LOG_LEVEL` | no (`info`) | pino level: `fatal|error|warn|info|debug|trace`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | no | When set, enables OpenTelemetry OTLP HTTP trace export. |
 | `OTEL_SERVICE_NAME` | no (`lca-api`) | Trace service name. |
@@ -44,6 +45,8 @@ Reference deployment: a single Node.js 22 container (image built from [docker/Do
 For local development use [docker/docker-compose.dev.yml](../docker/docker-compose.dev.yml).
 
 The MVP is single-tenant and single-node per deployment. Horizontal scaling is possible for the request path — telemetry writes are batched but not queued, and retention runs in-process under a Postgres advisory lock, so multiple replicas coexist safely. There is no support for tenant isolation today.
+
+On `SIGINT`/`SIGTERM` the API shuts down gracefully: it stops the retention, health-probe, and reconciliation schedulers, flushes the batched telemetry writer, then closes the HTTP server and database pool and exits 0.
 
 ## Database migrations
 
@@ -120,6 +123,21 @@ Example: pin all requests from client `acme-prod` that require `tool_use` to `op
 
 Keys are minted via `POST /v1/keys` (or `lca keys create`). The plaintext secret is returned **exactly once**; subsequent list/get calls never include it. Storage: Argon2id hash + `client_id` + `label` + created/revoked timestamps.
 
+**Bootstrapping the first key.** `POST /v1/keys` is itself authenticated, `db:seed` does not create a key, and `LCA_BOOTSTRAP_ADMIN_KEY` is not consumed — so the first key must be minted directly against the database, once, after `npm run build` and `npm run db:seed`:
+
+```bash
+DATABASE_URL=postgres://lca:lca@localhost:5432/lca node -e "
+import('./packages/persistence/dist/index.js').then(async (p) => {
+  const db = p.createDb(p.createPool(process.env.DATABASE_URL));
+  const { secret } = await p.createApiKey(db, { clientId: 'admin', label: 'bootstrap' });
+  console.log(secret);
+  await db.destroy();
+});
+"
+```
+
+Every subsequent key is then minted through `POST /v1/keys` / `lca keys create` authenticated with an existing key.
+
 The auth plugin uses an in-memory verify cache (60-second TTL, max 4096 entries) keyed on the presented bearer token. This keeps the Argon2 verify (~100 ms) off the request hot path so a single node can sustain the 100 rps sustained / 500 rps burst target (SC-011). Revoking a key immediately invalidates its cache entry, so revocation is effective on the next request.
 
 Rotation:
@@ -168,7 +186,7 @@ When the alert fires:
 
 ## Observability endpoints
 
-- `GET /metrics` (public) — Prometheus text format. Includes `lca_requests_total`, `lca_request_duration_seconds`, `lca_routing_overhead_ms`, `lca_reconciliation_rate`, `lca_reconciliation_alert_active`, and default Node.js process metrics.
+- `GET /metrics` (public) — Prometheus text format. Live series: `lca_reconciliation_rate` and `lca_reconciliation_alert_active` (refreshed every 30 s by the reconciliation loop), plus default Node.js process metrics. The `lca_requests_total`, `lca_request_duration_seconds`, and `lca_routing_overhead_ms` families are registered but not yet emitted by the request path — they read empty/zero regardless of traffic; use per-request telemetry (`GET /v1/telemetry/events`) for request-level analysis today.
 - `x-request-id` header — echoed on every response and used as the `TelemetryEvent.eventId`. Propagated into pino log lines (`reqId`) and OpenTelemetry span attributes.
 - `GET /v1/health` (public) — reports DB reachability and active pricing.
 - pino JSON logs to stdout — redaction paths cover `req.headers.authorization` and `req.headers["x-api-key"]`.
@@ -196,7 +214,7 @@ Run `npm run db:seed` after `npm run db:migrate`. The API deliberately refuses t
 ### Every completion is failing with 502 upstream_5xx
 
 1. `GET /v1/health` — confirms the API and DB are up.
-2. `curl /metrics | grep provider` — look for probe failures.
+2. `lca telemetry query --limit 20 --json | jq '.events[] | select(.terminalErrorClass != "none") | {eventId, effectiveProviderId, terminalErrorClass}'` — recent failing requests by provider. Per-request telemetry (not `/metrics`) carries this; there is no per-provider request metric today.
 3. Check `provider_health_state` table — an unhealthy provider is being routed to via an operator rule that pins it. Disable that rule or restore provider health.
 4. If it's a real upstream outage, the fallback contract (FR-033) automatically retries the next candidate exactly once for `timeout`, `rate_limit`, and `upstream_5xx`. If the fallback candidate is also broken, the response terminates with `terminal_fallback_exhausted`.
 
