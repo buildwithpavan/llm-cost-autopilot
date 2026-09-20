@@ -54,6 +54,14 @@ export function buildTelemetryEvent(input: BuildTelemetryEventInput): TelemetryE
     ? terminal.modelId
     : first.modelId;
 
+  // FR-035: when the automatic fallback attempt also fails, the request's
+  // terminal outcome is the synthesized event-level class, not the (transient)
+  // error class of the individual fallback attempt.
+  const terminalErrorClass: ErrorClass =
+    input.attempts.length === 2 && terminal.errorClass !== "none"
+      ? "terminal_fallback_exhausted"
+      : terminal.errorClass;
+
   const successful = input.attempts.filter((a) => a.errorClass === "none");
   const aggregatedInputTokens = successful.reduce(
     (sum, a) => sum + (a.inputTokens ?? 0),
@@ -102,7 +110,7 @@ export function buildTelemetryEvent(input: BuildTelemetryEventInput): TelemetryE
     aggregatedInputTokens,
     aggregatedOutputTokens,
     totalLatencyMs: input.totalLatencyMs,
-    terminalErrorClass: terminal.errorClass,
+    terminalErrorClass,
     estimatedCostUsd,
     actualCostUsd,
     pricingTableVersionId: input.decision.pricingTableVersionId,

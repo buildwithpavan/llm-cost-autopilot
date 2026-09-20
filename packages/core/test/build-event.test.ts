@@ -128,6 +128,31 @@ describe("buildTelemetryEvent", () => {
     expect(event.reconciled).toBeNull();
   });
 
+  it("marks a two-attempt both-failed chain as terminal_fallback_exhausted (FR-035)", () => {
+    const failedFallback: Attempt = {
+      ...FALLBACK_ATTEMPT,
+      errorClass: "upstream_5xx",
+      inputTokens: null,
+      outputTokens: null,
+      estimatedCostUsd: "0",
+      actualCostUsd: null,
+    };
+    const event = buildTelemetryEvent({
+      ...OPTS,
+      decision: BASE_DECISION,
+      attempts: [FAIL_ATTEMPT, failedFallback],
+      totalLatencyMs: 130,
+    });
+    expect(event.attempts).toHaveLength(2);
+    // terminal_fallback_exhausted is an event-level class synthesized when the
+    // fallback attempt also fails; it is never an individual attempt's class.
+    expect(event.terminalErrorClass).toBe("terminal_fallback_exhausted");
+    expect(event.effectiveProviderId).toBe("mock-cheap");
+    expect(event.effectiveModelId).toBe("mock-cheap:small");
+    expect(event.actualCostUsd).toBeNull();
+    expect(event.reconciled).toBeNull();
+  });
+
   it("preserves shadowedSource when the decision source is operator_rule", () => {
     const decision = {
       ...BASE_DECISION,
