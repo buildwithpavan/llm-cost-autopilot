@@ -9,6 +9,7 @@ This guide walks a developer through validating the MVP end-to-end on a clean ch
 - Node.js 22 LTS (matches constitution)
 - npm 10+ (bundled with Node 22)
 - Docker Engine 24+ with Compose plugin
+- `jq` (used by the Scenario 1–6 `curl` examples; the `lca` CLI paths do not need it)
 - Free ports: `8080` (API), `5432` (Postgres)
 
 Detailed dependency versions are pinned in the workspace root `package.json`.
@@ -27,7 +28,9 @@ Copy the sample environment file and edit as needed:
 cp .env.example .env
 # Set at minimum:
 #   DATABASE_URL=postgres://lca:lca@localhost:5432/lca
-#   LCA_BOOTSTRAP_ADMIN_KEY=<a long random string>
+# (LCA_BOOTSTRAP_ADMIN_KEY is listed in .env.example but is reserved and NOT
+#  consumed at runtime today — see "Bootstrap an API key" for how the first
+#  key is actually minted.)
 # For real-provider tests (optional):
 #   OPENAI_API_KEY=sk-...
 #   ANTHROPIC_API_KEY=sk-ant-...
@@ -51,10 +54,28 @@ docker compose -f docker/docker-compose.dev.yml up --build
 
 ## Bootstrap an API key
 
+Every endpoint except `/v1/health` and `/metrics` requires a Bearer token, and
+`POST /v1/keys` (`lca keys create`) is itself authenticated — so the **first**
+key must be minted directly against the database. Run this once, after
+`npm run build` and `npm run db:seed`:
+
 ```bash
-lca keys create --client-id dev --label "quickstart" --json
-# Copy the returned `secret` — it is never shown again.
-export LCA_API_KEY="<returned secret>"
+DATABASE_URL=postgres://lca:lca@localhost:5432/lca node -e "
+import('./packages/persistence/dist/index.js').then(async (p) => {
+  const db = p.createDb(p.createPool(process.env.DATABASE_URL));
+  const { secret } = await p.createApiKey(db, { clientId: 'dev', label: 'quickstart' });
+  console.log(secret);
+  await db.destroy();
+});
+"
+# Copy the printed secret — it is never shown again.
+export LCA_API_KEY="<printed secret>"
+```
+
+With `LCA_API_KEY` exported, mint any further per-client keys through the CLI:
+
+```bash
+lca keys create --client-id another-client --label "another" --json
 ```
 
 ## Scenario 1 — Cost-aware routed request (validates User Story 1, SC-004)
@@ -240,7 +261,10 @@ npm test -w @lca/providers -- --run
 ## Scenario 9 — No secret leakage (SC-009)
 
 ```bash
-npm run test:redaction     # fuzz test in packages/core, plus grep pass over the SQLite dump of a test run
+# Fuzz test: 1 000 synthetic secret-shaped payloads must not survive redaction.
+npx vitest run packages/core/test/redaction.fuzz.test.ts
+# End-to-end grep pass: runs the suite with a known secret and greps all output.
+node scripts/audit-secrets.mjs
 ```
 
 **Expected**: Fuzz test passes on 1 000 synthetic secret-shaped payloads; grep over the exported test-run telemetry finds zero secret matches.
