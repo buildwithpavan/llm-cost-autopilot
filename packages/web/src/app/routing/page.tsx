@@ -1,5 +1,6 @@
 "use client";
 import { useMemo } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/AppShell";
 import { DecisionGraphPanel } from "@/features/decision-graph/DecisionGraphPanel";
 import { SupportCluster } from "@/features/support-cluster/SupportCluster";
@@ -37,6 +38,20 @@ export default function RoutingPage() {
       version={env.appVersion}
     >
       <div className={styles.actions}>
+        <Link
+          href="/routing/preview"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 13,
+            fontWeight: 500,
+            color: "var(--accent-primary)",
+            textDecoration: "none",
+          }}
+        >
+          What-if routing →
+        </Link>
         <DevRequestTrigger {...(env.apiKey ? { apiKey: env.apiKey } : {})} />
       </div>
       {!displayEvent ? (
