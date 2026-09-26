@@ -17,7 +17,7 @@ import {
 } from "./event-presenters.js";
 import type { Attempt, RationaleEntry, TelemetryEvent } from "../../types/index.js";
 import { formatUsd, formatMs, formatInt, formatClockTime, formatRelativeTime } from "../../lib/format.js";
-import { AlertTriangle, ArrowLeft, ArrowRight, ArrowDown, Copy, Check } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ArrowDown, Copy, Check, GitCompareArrows } from "lucide-react";
 import styles from "./RoutingExplorer.module.css";
 
 const NOT_RECORDED = "Not recorded";
@@ -44,10 +44,18 @@ export function RequestDetailView({ eventId }: { eventId: string }) {
       activeKey="Traffic"
     >
       <div className={styles.page}>
-        <Link href="/traffic" className={styles.detailBack}>
-          <ArrowLeft size={14} aria-hidden />
-          Routing Explorer
-        </Link>
+        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <Link href="/traffic" className={styles.detailBack}>
+            <ArrowLeft size={14} aria-hidden />
+            Routing Explorer
+          </Link>
+          {state.status === "ready" ? (
+            <Link href={`/replay?eventId=${encodeURIComponent(eventId)}`} className={styles.detailBack}>
+              <GitCompareArrows size={14} aria-hidden />
+              Replay decision
+            </Link>
+          ) : null}
+        </div>
 
         {state.status === "loading" ? (
           <DetailSkeleton />

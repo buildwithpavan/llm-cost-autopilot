@@ -6,3 +6,4 @@ export * from "./metrics.js";
 export * from "./keys.js";
 export * from "./rules.js";
 export * from "./rollups.js";
+export * from "./replay.js";
