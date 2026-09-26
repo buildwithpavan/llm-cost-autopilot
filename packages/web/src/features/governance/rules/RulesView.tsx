@@ -1,5 +1,6 @@
 "use client";
 import { useMemo } from "react";
+import Link from "next/link";
 import { AlertTriangle, ScrollText, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "../../../components/shell/AppShell.js";
@@ -8,6 +9,7 @@ import { useHealth } from "../../../hooks/useHealth.js";
 import { getEnvironment } from "../../../lib/env.js";
 import { formatClockTime, formatRelativeTime, abbreviateId } from "../../../lib/format.js";
 import type { OperatorRule } from "../../../types/index.js";
+import { GovernanceTabs } from "../GovernanceTabs.js";
 import { useRules } from "./useRules.js";
 import {
   ANY_LABEL,
@@ -36,6 +38,7 @@ export function RulesView() {
       activeKey="Governance"
     >
       <div className={styles.page}>
+        <GovernanceTabs />
         <header className={styles.head}>
           <div>
             <div className={styles.kicker}>Governance</div>
@@ -115,7 +118,9 @@ function RuleRow({ rule }: { rule: OperatorRule }) {
   return (
     <tr className={rule.enabled ? undefined : styles.rowDisabled}>
       <td title={rule.ruleId}>
-        <Mono size={12} color="var(--text-primary)">{abbreviateId(rule.ruleId, 16)}</Mono>
+        <Link href={`/governance/rules/${rule.ruleId}`} className={styles.ruleLink}>
+          <Mono size={12} color="var(--accent-blue)">{abbreviateId(rule.ruleId, 16)}</Mono>
+        </Link>
       </td>
       <td className={styles.priority}>
         <Mono size={12} color="var(--text-primary)">{formatPriority(rule.priority)}</Mono>

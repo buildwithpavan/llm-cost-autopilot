@@ -132,6 +132,21 @@
   text-align: right;
 }
 
+.ruleLink {
+  text-decoration: none;
+  border-radius: 3px;
+}
+
+.ruleLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ruleLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
 .chipRow {
   display: flex;
   flex-wrap: wrap;

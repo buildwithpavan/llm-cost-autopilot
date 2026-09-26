@@ -11,6 +11,7 @@ import type { ApiKeyMetadata } from "../../types/index.js";
 import type { CreatedKey } from "../../lib/api/keys.js";
 import { useKeys } from "./useKeys.js";
 import { keyStatus } from "./keys-presenters.js";
+import { GovernanceTabs } from "./GovernanceTabs.js";
 import styles from "./Keys.module.css";
 
 export function KeysView() {
@@ -34,6 +35,7 @@ export function KeysView() {
       activeKey="Governance"
     >
       <div className={styles.page}>
+        <GovernanceTabs />
         <header className={styles.head}>
           <div>
             <div className={styles.kicker}>Governance</div>
