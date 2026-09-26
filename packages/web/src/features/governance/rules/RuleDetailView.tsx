@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Pencil, ShieldCheck, Trash2 } from "lucide-react";
 
 import { AppShell } from "../../../components/shell/AppShell.js";
 import { Chip, Mono, Pill, Toggle } from "../../../components/primitives/index.js";
@@ -13,6 +13,7 @@ import { ApiCallError } from "../../../lib/api/client.js";
 import type { OperatorRule } from "../../../types/index.js";
 import { GovernanceTabs } from "../GovernanceTabs.js";
 import { useRule } from "./useRule.js";
+import { RuleEditor } from "./RuleEditor.js";
 import {
   ANY_LABEL,
   formatEnabled,
@@ -26,7 +27,7 @@ import styles from "./RuleDetail.module.css";
 export function RuleDetailView({ ruleId }: { ruleId: string }) {
   const env = useMemo(() => getEnvironment(), []);
   const health = useHealth();
-  const { state, setEnabled, remove } = useRule(ruleId);
+  const { state, setEnabled, remove, refresh } = useRule(ruleId);
 
   const healthy = health.status === "healthy";
   const connection =
@@ -73,7 +74,7 @@ export function RuleDetailView({ ruleId }: { ruleId: string }) {
             </Link>
           </div>
         ) : (
-          <RuleDetailBody rule={state.rule} setEnabled={setEnabled} remove={remove} />
+          <RuleDetailBody rule={state.rule} setEnabled={setEnabled} remove={remove} refresh={refresh} />
         )}
       </div>
     </AppShell>
@@ -84,16 +85,19 @@ function RuleDetailBody({
   rule,
   setEnabled,
   remove,
+  refresh,
 }: {
   rule: OperatorRule;
   setEnabled: (next: boolean) => Promise<OperatorRule>;
   remove: () => Promise<void>;
+  refresh: () => void;
 }) {
   const router = useRouter();
   const enabled = formatEnabled(rule.enabled);
   const match = formatMatchConditions(rule.match);
   const anyMatch = isMatchAny(match);
 
+  const [editing, setEditing] = useState(false);
   const [toggleBusy, setToggleBusy] = useState(false);
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -113,6 +117,28 @@ function RuleDetailBody({
     }
   }
 
+  if (editing) {
+    return (
+      <>
+        <header className={styles.head}>
+          <div>
+            <div className={styles.kicker}>Governance</div>
+            <h1 className={styles.title}>Edit operator rule</h1>
+          </div>
+        </header>
+        <RuleEditor
+          mode="edit"
+          initialRule={rule}
+          onCancel={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            refresh();
+          }}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       <header className={styles.head}>
@@ -123,13 +149,18 @@ function RuleDetailBody({
             <Mono size={13} color="var(--text-secondary)">{rule.ruleId}</Mono>
           </div>
         </div>
-        <Pill
-          label={enabled.label}
-          dot={enabled.tone === "active" ? "var(--success)" : "var(--text-tertiary)"}
-          color={enabled.tone === "active" ? "var(--text-primary)" : "var(--text-tertiary)"}
-          bg="var(--bg-inset)"
-          border="var(--border-default)"
-        />
+        <div className={styles.headActions}>
+          <button type="button" className={styles.editBtn} onClick={() => setEditing(true)}>
+            <Pencil size={13} aria-hidden /> Edit
+          </button>
+          <Pill
+            label={enabled.label}
+            dot={enabled.tone === "active" ? "var(--success)" : "var(--text-tertiary)"}
+            color={enabled.tone === "active" ? "var(--text-primary)" : "var(--text-tertiary)"}
+            bg="var(--bg-inset)"
+            border="var(--border-default)"
+          />
+        </div>
       </header>
 
       <div className={styles.note}>

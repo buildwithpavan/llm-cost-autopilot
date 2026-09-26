@@ -54,6 +54,38 @@
   word-break: break-all;
 }
 
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--r-mini);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+.editBtn:hover {
+  border-color: var(--border-muted);
+  color: var(--text-primary);
+}
+.editBtn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
 .note {
   display: flex;
   align-items: flex-start;

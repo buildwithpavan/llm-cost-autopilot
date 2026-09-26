@@ -1,7 +1,7 @@
 "use client";
 import { useMemo } from "react";
 import Link from "next/link";
-import { AlertTriangle, ScrollText, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Plus, ScrollText, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "../../../components/shell/AppShell.js";
 import { Chip, Mono, Pill } from "../../../components/primitives/index.js";
@@ -47,6 +47,9 @@ export function RulesView() {
               Operator rules override client-level overrides and autopilot when matched.
             </p>
           </div>
+          <Link href="/governance/rules/new" className={styles.primaryBtn}>
+            <Plus size={14} aria-hidden /> New rule
+          </Link>
         </header>
 
         <div className={styles.note}>
