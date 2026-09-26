@@ -4,3 +4,4 @@ export * from "./telemetry.js";
 export * from "./catalog.js";
 export * from "./metrics.js";
 export * from "./keys.js";
+export * from "./rules.js";
