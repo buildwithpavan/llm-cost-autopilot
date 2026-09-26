@@ -7,6 +7,12 @@ export interface CatalogModel {
   qualityTier: "low" | "standard" | "high";
   capabilities: string[];
   contextWindow: number;
+  /** STATIC published spec (not live telemetry). Already on the wire; typed defensively. */
+  publishedLatencyProfile?: { p50Ms: number; p95Ms: number };
+  /** STATIC published spec in 0..1 (not live health). Already on the wire; typed defensively. */
+  publishedReliabilityScore?: number;
+  /** Opaque pricing reference — NOT a price. Already on the wire; typed defensively. */
+  pricingDescriptorRef?: string;
 }
 
 /** Mirrors GET /v1/catalog. Only the active pricing version id is exposed (not per-entry prices). */
