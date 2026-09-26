@@ -1,0 +1,325 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px 40px;
+  max-width: var(--frame-w, 1536px);
+  margin: 0 auto;
+  width: 100%;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.subtitle {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card,
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-card, 8px);
+  padding: 14px 16px;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 132px;
+}
+.cardHead,
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.panelHead {
+  margin-bottom: 10px;
+}
+
+.bigStat {
+  font-family: var(--font-mono);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+.versionStat {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.statLabel {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.statRows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+}
+.statRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+}
+.statRowLabel {
+  color: var(--text-secondary);
+}
+.statRowValue {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+.statWarn {
+  font-family: var(--font-mono);
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.footNote {
+  margin-top: auto;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+.unavailable,
+.unavailableInline {
+  color: var(--text-tertiary);
+  font-style: italic;
+  font-size: 12px;
+}
+.reconAlert {
+  margin-top: 6px;
+  font-size: 11px;
+}
+.alertOn {
+  color: var(--error);
+  font-weight: 700;
+}
+.alertOff {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.providerChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-chip, 5px);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-primary);
+}
+.dotOk {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  flex: 0 0 auto;
+}
+
+.sectionTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 4px 2px 0;
+}
+
+.miniTraceMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  overflow-wrap: anywhere;
+}
+.inlineLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.inlineLink:hover {
+  text-decoration: underline;
+}
+
+.reqList {
+  display: flex;
+  flex-direction: column;
+}
+.reqRow {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto auto 64px 84px 16px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border-top: 1px solid var(--border-muted);
+  text-decoration: none;
+  color: inherit;
+}
+.reqRow:first-child {
+  border-top: none;
+}
+.reqRow:hover {
+  background: var(--bg-inset);
+}
+.reqTime {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.reqModel {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reqMetric {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+.reqArrow {
+  color: var(--text-tertiary);
+}
+
+.badge {
+  padding: 1px 7px;
+  border-radius: var(--r-chip, 5px);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 700px) {
+  .actions {
+    grid-template-columns: 1fr;
+  }
+}
+.actionCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-card, 8px);
+  background: var(--bg-panel);
+  text-decoration: none;
+  color: inherit;
+}
+.actionCard:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-inset);
+}
+.actionIcon {
+  display: inline-flex;
+  color: var(--accent-primary);
+}
+.actionTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.actionBody {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.sectionError {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-mini, 6px);
+  background: rgba(242, 89, 89, 0.08);
+  border: 1px solid rgba(242, 89, 89, 0.35);
+  color: var(--error);
+  font-size: 12px;
+}
+.empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.skelBar {
+  border-radius: var(--r-mini, 6px);
+  background: linear-gradient(90deg, var(--bg-inset) 25%, var(--bg-card) 37%, var(--bg-inset) 63%);
+  background-size: 400% 100%;
+  animation: lca-overview-shimmer 1.4s ease infinite;
+}
+@keyframes lca-overview-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}

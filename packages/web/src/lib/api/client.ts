@@ -60,3 +60,26 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
   if (!bodyText) return undefined as unknown as T;
   return JSON.parse(bodyText) as T;
 }
+
+/** Like apiRequest but returns the raw response body (e.g. Prometheus text at /metrics). */
+export async function apiRequestText(path: string, opts: RequestOptions = {}): Promise<string> {
+  const env = getEnvironment();
+  const url = `${env.apiBaseUrl.replace(/\/$/, "")}${path}`;
+  const rid = correlationId();
+
+  const headers: Record<string, string> = { "x-request-id": rid };
+  if (opts.apiKey) headers["authorization"] = `Bearer ${opts.apiKey}`;
+
+  const init: RequestInit = {
+    method: opts.method ?? "GET",
+    headers,
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  };
+
+  const res = await fetch(url, init);
+  const bodyText = await res.text();
+  if (!res.ok) {
+    throw new ApiCallError(res.status, `${res.status} ${res.statusText}`, rid);
+  }
+  return bodyText;
+}
