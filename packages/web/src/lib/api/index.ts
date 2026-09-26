@@ -3,3 +3,4 @@ export * from "./health.js";
 export * from "./telemetry.js";
 export * from "./catalog.js";
 export * from "./metrics.js";
+export * from "./keys.js";

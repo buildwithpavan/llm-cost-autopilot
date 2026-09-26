@@ -12,4 +12,5 @@ export type {
   RoutingDecision,
   TelemetryEvent,
   TelemetryRollup,
+  ApiKeyMetadata,
 } from "@lca/core";

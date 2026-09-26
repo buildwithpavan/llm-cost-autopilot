@@ -31,9 +31,12 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
   const rid = correlationId();
 
   const headers: Record<string, string> = {
-    "content-type": "application/json",
     "x-request-id": rid,
   };
+  // Only advertise a JSON body when one is present; a bodyless request that
+  // still sends content-type: application/json (e.g. DELETE) is rejected by the
+  // server's JSON parser with 400 "empty JSON body".
+  if (opts.body !== undefined) headers["content-type"] = "application/json";
   if (opts.apiKey) headers["authorization"] = `Bearer ${opts.apiKey}`;
 
   const init: RequestInit = {
