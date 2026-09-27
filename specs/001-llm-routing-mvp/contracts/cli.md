@@ -31,7 +31,7 @@ Exit codes:
 |-------------|-----------|-------|
 | `lca health` | `GET /v1/health` | Prints ok/degraded; exit 0 when ok, exit 1 when degraded. |
 | `lca complete --messages-file <path> [--max-latency-ms N] [--max-cost-usd D] [--min-quality low\|standard\|high] [--capability tool_use,...] [--pin-provider ID] [--pin-model ID]` | `POST /v1/completions` | Reads messages JSON from file (or `-` for stdin). Emits the CompletionResponse. |
-| `lca route preview --messages-file <path> [same flags as complete]` | `POST /v1/routing/preview` | Dry-run routing. Never touches a provider. |
+| `lca route preview --messages-file <path> [same flags as complete]` | `POST /v1/routing/preview` | Dry-run routing using the same precedence as `complete` (`operator_rule` > `client_override` > `autopilot`). Read-only: never touches a provider and writes no telemetry. |
 | `lca catalog list` | `GET /v1/catalog` | Prints the catalog. |
 | `lca telemetry query [--client-id ID] [--provider-id ID] [--model-id ID] [--since RFC3339] [--until RFC3339] [--limit N] [--cursor C]` | `GET /v1/telemetry/events` | Prints events; supports `--json` for automation. |
 | `lca telemetry rollups [--provider-id ID] [--model-id ID] [--from YYYY-MM-DD] [--to YYYY-MM-DD]` | `GET /v1/telemetry/rollups` | Prints rollups. |

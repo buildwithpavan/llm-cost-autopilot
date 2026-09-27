@@ -93,7 +93,11 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     telemetryWriter: deps.telemetryWriter,
     ...(deps.ruleStore ? { ruleStore: deps.ruleStore } : {}),
   });
-  await app.register(previewRoute, { db: deps.db, registry: deps.registry });
+  await app.register(previewRoute, {
+    db: deps.db,
+    registry: deps.registry,
+    ...(deps.ruleStore ? { ruleStore: deps.ruleStore } : {}),
+  });
   await app.register(catalogRoute, { db: deps.db, registry: deps.registry });
   await app.register(providerHealthRoute, { db: deps.db });
   await app.register(telemetryEventsRoute, { db: deps.db, registry: deps.registry });

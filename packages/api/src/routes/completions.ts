@@ -5,19 +5,18 @@ import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import {
   completionRequestSchema,
   evaluation,
-  overrides as coreOverrides,
   redaction,
   routing,
   telemetry as coreTelemetry,
   type CompletionRequest,
   type NormalizedRequest,
   type NormalizedResponse,
-  type RationaleEntry,
   type RoutingDecision,
 } from "@lca/core";
 import type { OperatorRuleStore, TelemetryWriter } from "@lca/persistence";
 
-import { loadCatalogSnapshot, type AppContext, type CatalogSnapshot } from "../wiring.js";
+import { loadCatalogSnapshot, type AppContext } from "../wiring.js";
+import { buildRoutingDecision, resolveGovernance } from "../routing/resolve-decision.js";
 import { LcaError } from "../plugins/errors.js";
 import { sharedStreamBus, type TelemetryStreamBus } from "../plugins/stream-bus.js";
 
@@ -57,29 +56,6 @@ function makeEventId(requestId: string): string {
   return uuidRe.test(requestId) ? requestId : randomUUID();
 }
 
-/** Verify that the target of an override or operator pin exists in the current catalog. */
-function validatePinAgainstCatalog(
-  pin: { providerId?: string | null; modelId?: string | null },
-  snapshot: CatalogSnapshot,
-): { providerId: string; modelId: string } {
-  const candidates = snapshot.models.filter((m) => {
-    if (pin.providerId && m.providerId !== pin.providerId) return false;
-    if (pin.modelId && m.modelId !== pin.modelId) return false;
-    return true;
-  });
-  if (candidates.length === 0) {
-    throw new LcaError({
-      httpStatus: 422,
-      code: "override_target_missing",
-      message: `override target provider=${pin.providerId ?? "*"} model=${pin.modelId ?? "*"} is not in the healthy catalog`,
-    });
-  }
-  // Deterministic tiebreak: first alphabetical modelId under the pinned provider.
-  candidates.sort((a, b) => a.modelId.localeCompare(b.modelId));
-  const chosen = candidates[0]!;
-  return { providerId: chosen.providerId, modelId: chosen.modelId };
-}
-
 const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
   const bus = deps.streamBus ?? sharedStreamBus;
 
@@ -108,9 +84,13 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
 
     const snapshot = await loadCatalogSnapshot(deps);
 
-    // Resolve override precedence (operator > client > autopilot).
+    // Resolve governance precedence (operator_rule > client_override > autopilot)
+    // exactly once, publish the outcome, then build the routing decision. The
+    // governance.completed event is published before any invalid-target 422 so
+    // event/SSE ordering matches the completion contract. Side effects
+    // (telemetry, provider calls, fallback) stay in this route.
     const rules = deps.ruleStore ? await deps.ruleStore.snapshot() : [];
-    const resolution = coreOverrides.resolveOverride({ request: normalized, rules });
+    const resolution = resolveGovernance({ request: normalized, rules, snapshot });
 
     bus.publish({
       eventType: "governance.completed",
@@ -122,66 +102,7 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
       matchedRuleId: resolution.matchedRuleId ?? null,
     });
 
-    let decision: RoutingDecision;
-    if (resolution.pin) {
-      // Validate that the pin target exists in the healthy catalog before any provider call.
-      const pin = resolution.pin as { providerId?: string | null; modelId?: string | null };
-      const target = validatePinAgainstCatalog(
-        { providerId: pin.providerId ?? null, modelId: pin.modelId ?? null },
-        snapshot,
-      );
-      const rationale: RationaleEntry[] = [
-        {
-          factor: "override",
-          verdict: "preferred",
-          note:
-            resolution.effectiveSource === "operator_rule"
-              ? `autonomous scoring bypassed by operator_rule ${resolution.matchedRuleId ?? ""}${
-                  resolution.shadowedSource ? " (shadowed client_override)" : ""
-                }`.trim()
-              : "autonomous scoring bypassed by client_override",
-        },
-      ];
-      decision = {
-        decisionSource: resolution.effectiveSource,
-        shadowedSource: resolution.shadowedSource,
-        candidateRanking: [
-          {
-            providerId: target.providerId,
-            modelId: target.modelId,
-            included: true,
-            exclusionReason: null,
-            scoreBreakdown: { override: 1 },
-          },
-        ],
-        chosenProviderId: target.providerId,
-        chosenModelId: target.modelId,
-        rationale,
-        pricingTableVersionId: snapshot.pricingTable.versionId,
-        estimatedCostUsd: "0",
-      };
-    } else {
-      try {
-        decision = routing.decideRoute({
-          request: normalized,
-          catalog: snapshot.models,
-          pricingTable: snapshot.pricingTable,
-        });
-      } catch (err) {
-        const message = (err as Error).message;
-        if (/context/i.test(message)) {
-          throw new LcaError({ httpStatus: 422, code: "context_exceeded", message });
-        }
-        if (/no candidate/i.test(message) || /empty catalog/i.test(message)) {
-          throw new LcaError({
-            httpStatus: 422,
-            code: "provider_unavailable",
-            message,
-          });
-        }
-        throw err;
-      }
-    }
+    const decision = buildRoutingDecision({ request: normalized, resolution, snapshot });
 
     const adapter = deps.registry.get(decision.chosenProviderId);
     if (!adapter) {

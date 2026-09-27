@@ -5,12 +5,11 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   completionRequestSchema,
   evaluation,
-  routing,
   type NormalizedRequest,
-  type RoutingDecision,
 } from "@lca/core";
 
 import { loadCatalogSnapshot, type AppContext } from "../wiring.js";
+import { resolveRoutingDecision } from "../routing/resolve-decision.js";
 import { LcaError } from "../plugins/errors.js";
 
 const plugin: FastifyPluginAsync<AppContext> = async (fastify, deps) => {
@@ -43,26 +42,19 @@ const plugin: FastifyPluginAsync<AppContext> = async (fastify, deps) => {
 
     const snapshot = await loadCatalogSnapshot(deps);
 
-    let decision: RoutingDecision;
-    try {
-      decision = routing.decideRoute({
-        request: normalized,
-        catalog: snapshot.models,
-        pricingTable: snapshot.pricingTable,
-      });
-    } catch (err) {
-      const message = (err as Error).message;
-      if (/context/i.test(message)) {
-        throw new LcaError({ httpStatus: 422, code: "context_exceeded", message });
-      }
-      throw new LcaError({
-        httpStatus: 422,
-        code: "provider_unavailable",
-        message,
-      });
-    }
+    // Preview mirrors /v1/completions routing resolution (operator_rule >
+    // client_override > autopilot) but is strictly read-only: no provider
+    // invocation, no telemetry writes, and no event publishing.
+    const rules = (await deps.ruleStore?.snapshot()) ?? [];
+    const { decision } = resolveRoutingDecision({
+      request: normalized,
+      rules,
+      snapshot,
+    });
+
     return reply.status(200).send(decision);
   });
 };
 
 export default plugin;
+

@@ -19,6 +19,7 @@ import { createMockAdapter, createRegistry } from "@lca/providers";
 
 import { buildServer } from "../../src/server.js";
 import { loadConfig } from "../../src/config.js";
+import { sharedStreamBus } from "../../src/plugins/stream-bus.js";
 
 const DATABASE_URL = process.env["DATABASE_URL"] ?? "postgres://lca:lca@localhost:5432/lca";
 const gated = process.env["RUN_DB_TESTS"] === "1" ? describe : describe.skip;
@@ -208,5 +209,72 @@ gated("US3 overrides acceptance", () => {
     expect(replay.body.matches).toBe(true);
     expect(replay.body.recorded.decisionSource).toBe("operator_rule");
     expect(replay.body.replayed.chosenProviderId).toBe("mock-fast");
+  });
+
+  it("publishes governance.completed before an invalid-target 422 (event ordering regression)", async () => {
+    await db.deleteFrom("operator_rules").execute();
+    ruleStore.invalidate();
+    // Operator rule pins a target that is not in the catalog, shadowing a client override.
+    await ruleStore.create({
+      priority: 10,
+      enabled: true,
+      match: { clientIds: null, requiredCapabilities: null, minEstimatedTokens: null, maxEstimatedTokens: null },
+      pin: { providerId: "nonexistent-provider", modelId: null },
+    });
+
+    const cid = randomUUID();
+    const seen: Array<{ eventType: string; decisionSource?: string; shadowedSource?: string | null }> = [];
+    const unsubscribe = sharedStreamBus.subscribe((event) => {
+      if ((event as { eventId?: string }).eventId === cid) {
+        seen.push(event as unknown as { eventType: string; decisionSource?: string; shadowedSource?: string | null });
+      }
+    });
+
+    const before = await db
+      .selectFrom("telemetry_events")
+      .select(db.fn.count("event_id").as("c"))
+      .where("client_id", "=", "us3-integ")
+      .executeTakeFirst();
+    const beforeCount = Number((before as { c: string }).c);
+
+    let res;
+    try {
+      res = await completeAndWait(
+        {
+          messages: [{ role: "user", content: "hi" }],
+          override: { providerId: "mock-cheap", modelId: "mock-cheap:small" },
+        },
+        cid,
+      );
+    } finally {
+      unsubscribe();
+    }
+
+    // 1. Invalid target still surfaces the same error.
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("override_target_missing");
+
+    // 2. governance.completed was published before the error response was finalized.
+    const governance = seen.find((e) => e.eventType === "governance.completed");
+    expect(governance).toBeTruthy();
+
+    // 3. Same decisionSource / shadowedSource semantics as before the extraction.
+    expect(governance?.decisionSource).toBe("operator_rule");
+    expect(governance?.shadowedSource).toBe("client_override");
+
+    // 4. No provider was invoked (no execution stage events for this request).
+    expect(seen.some((e) => e.eventType === "execution.started")).toBe(false);
+    expect(seen.some((e) => e.eventType === "execution.completed")).toBe(false);
+    expect(seen.some((e) => e.eventType === "decision.committed")).toBe(false);
+
+    // 5. No completion telemetry written as a result of this correction.
+    await new Promise((r) => setTimeout(r, 100));
+    const after = await db
+      .selectFrom("telemetry_events")
+      .select(db.fn.count("event_id").as("c"))
+      .where("client_id", "=", "us3-integ")
+      .executeTakeFirst();
+    const afterCount = Number((after as { c: string }).c);
+    expect(afterCount).toBe(beforeCount);
   });
 });
