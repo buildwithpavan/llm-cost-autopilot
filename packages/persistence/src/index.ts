@@ -6,7 +6,7 @@ export { runMigrations } from "./db/migrate.js";
 export { seed } from "./db/seed.js";
 export { buildCatalog, loadActivePricingTable } from "./catalog/load.js";
 export type { CatalogInput } from "./catalog/load.js";
-export { readHealthyProviders, setProviderHealth } from "./health/probe.js";
+export { readHealthyProviders, readProviderHealthStates, setProviderHealth } from "./health/probe.js";
 export { createHealthScheduler } from "./health/scheduler.js";
 export type { HealthScheduler, HealthSchedulerOptions } from "./health/scheduler.js";
 export { createOperatorRuleStore } from "./overrides/store.js";

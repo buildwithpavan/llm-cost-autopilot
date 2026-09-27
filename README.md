@@ -92,6 +92,7 @@ All non-`/v1/health` routes require `Authorization: Bearer <api_key>`. The canon
 | Route | Purpose |
 |---|---|
 | `GET /v1/health` (public) | Liveness + dependency health probe |
+| `GET /v1/health/providers` | Latest persisted per-provider health from the scheduler (Bearer; read-only, does not probe). Fields: `providerId`, `healthy`, `lastProbedAt`, `consecutiveFailures` |
 | `GET /metrics` (public) | Prometheus scrape endpoint |
 | `POST /v1/completions` | Route + execute an LLM chat/completion request |
 | `POST /v1/routing/preview` | Dry-run routing (no provider call, no telemetry) |

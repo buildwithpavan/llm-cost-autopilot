@@ -1,3 +1,5 @@
+import type { ProviderHealthState } from "@lca/core";
+
 import type { Db } from "../db/schema.js";
 
 export async function readHealthyProviders(db: Db): Promise<ReadonlySet<string>> {
@@ -7,6 +9,21 @@ export async function readHealthyProviders(db: Db): Promise<ReadonlySet<string>>
     .where("healthy", "=", true)
     .execute();
   return new Set(rows.map((r) => r.provider_id));
+}
+
+/** Reads the latest persisted provider health for every provider (providerId asc). Read-only; never probes. */
+export async function readProviderHealthStates(db: Db): Promise<ProviderHealthState[]> {
+  const rows = await db
+    .selectFrom("provider_health_state")
+    .select(["provider_id", "healthy", "last_probed_at", "consecutive_failures"])
+    .orderBy("provider_id", "asc")
+    .execute();
+  return rows.map((r) => ({
+    providerId: r.provider_id,
+    healthy: r.healthy,
+    lastProbedAt: (r.last_probed_at as Date).toISOString(),
+    consecutiveFailures: r.consecutive_failures,
+  }));
 }
 
 export async function setProviderHealth(

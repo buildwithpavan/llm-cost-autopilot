@@ -10,6 +10,7 @@ import { getSharedMetrics, type Metrics } from "./plugins/metrics.js";
 import authPlugin from "./plugins/auth.js";
 import { errorHandler } from "./plugins/errors.js";
 import healthRoute from "./routes/health.js";
+import providerHealthRoute from "./routes/provider-health.js";
 import completionsRoute from "./routes/completions.js";
 import previewRoute from "./routes/preview.js";
 import catalogRoute from "./routes/catalog.js";
@@ -94,6 +95,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   });
   await app.register(previewRoute, { db: deps.db, registry: deps.registry });
   await app.register(catalogRoute, { db: deps.db, registry: deps.registry });
+  await app.register(providerHealthRoute, { db: deps.db });
   await app.register(telemetryEventsRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryRollupsRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryReplayRoute, { db: deps.db, registry: deps.registry });
