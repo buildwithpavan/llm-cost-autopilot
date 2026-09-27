@@ -13,5 +13,12 @@ export {
   readReconciliationWindow,
 } from "./query.js";
 export type { QueryFilters, QueryOptions, QueryPage, RollupFilters } from "./query.js";
+export { aggregateRecentTelemetry } from "./summary.js";
+export type {
+  TelemetrySummary,
+  TelemetrySummaryTotals,
+  TelemetrySummaryProviderGroup,
+  TelemetrySummaryModelGroup,
+} from "./summary.js";
 export { createTelemetryWriter, writeTelemetryImmediate } from "./write.js";
 export type { TelemetryWriter, TelemetryWriterOptions } from "./write.js";

@@ -98,6 +98,7 @@ All non-`/v1/health` routes require `Authorization: Bearer <api_key>`. The canon
 | `POST /v1/routing/preview` | Dry-run routing using the same precedence as `/v1/completions` (`operator_rule` > `client_override` > `autopilot`); read-only — never invokes a provider and writes no telemetry |
 | `GET /v1/catalog` | List the current provider/model catalog |
 | `GET /v1/telemetry/events` | Query full-fidelity telemetry (cursor pagination) |
+| `GET /v1/telemetry/summary` | Bounded recent aggregate over `telemetry_events` (Bearer). Filters: `since`, `until`, `clientId`, `providerId`, `modelId`. Returns `totals`, `byProvider[]`, `byModel[]` (`requestCount`, `inputTokens`, `outputTokens`, `estimatedCostUsd`, `actualCostUsd`, `pendingActualCostCount`). Costs are decimal strings; `actualCostUsd` sums only non-null actuals and pending rows are counted in `pendingActualCostCount` (never as `$0`). Window defaults to the last 30 days (`until`=now); the maximum supported window is 30 days (aligned with full-fidelity retention) — larger ranges return `400 invalid_request`. Aggregates recent telemetry only; never returns raw events. |
 | `GET /v1/telemetry/rollups` | Query daily rollups (12-month window) |
 | `GET /v1/telemetry/replay/{eventId}` | Reproduce a stored routing decision (no provider call) |
 | `GET /v1/telemetry/events/stream` | Server-Sent Events stream of live telemetry |

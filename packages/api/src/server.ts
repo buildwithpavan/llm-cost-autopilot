@@ -15,6 +15,7 @@ import completionsRoute from "./routes/completions.js";
 import previewRoute from "./routes/preview.js";
 import catalogRoute from "./routes/catalog.js";
 import telemetryEventsRoute from "./routes/telemetry-events.js";
+import telemetrySummaryRoute from "./routes/telemetry-summary.js";
 import telemetryRollupsRoute from "./routes/telemetry-rollups.js";
 import telemetryReplayRoute from "./routes/telemetry-replay.js";
 import telemetryStreamRoute from "./routes/telemetry-stream.js";
@@ -101,6 +102,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   await app.register(catalogRoute, { db: deps.db, registry: deps.registry });
   await app.register(providerHealthRoute, { db: deps.db });
   await app.register(telemetryEventsRoute, { db: deps.db, registry: deps.registry });
+  await app.register(telemetrySummaryRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryRollupsRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryReplayRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryStreamRoute, { db: deps.db, registry: deps.registry });
