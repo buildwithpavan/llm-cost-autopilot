@@ -1,4 +1,9 @@
 import type { TelemetryEvent } from "../../types/index.js";
+import type {
+  TelemetrySummaryMetrics,
+  TelemetrySummaryProvider,
+  TelemetrySummaryModel,
+} from "../../lib/api/telemetry.js";
 
 /* ------------------------------------------------------------------ *
  * Decimal-safe USD arithmetic in integer micro-USD (1e-6 USD).
@@ -154,4 +159,84 @@ export function deriveReconciliationSummary(events: readonly TelemetryEvent[]): 
     else mismatch += 1;
   }
   return { reconciled, mismatch, pending, total: events.length };
+}
+
+/* ------------------------------------------------------------------ *
+ * Adapters from the server-aggregated /v1/telemetry/summary response
+ * into the frontend's integer micro-USD display model. Costs arrive as
+ * decimal strings and are parsed with parseMicroUsd (never Number()).
+ * ------------------------------------------------------------------ */
+
+/** Deterministic group order: estimated cost desc, then key asc (matches groupBy). */
+function sortCostGroups(groups: CostGroup[]): CostGroup[] {
+  return groups.sort(
+    (a, b) => b.estimatedMicroUsd - a.estimatedMicroUsd || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+  );
+}
+
+/** Adapt summary totals into the display CostTotals (reconciliation fields are event-level, not here). */
+export function summaryToTotals(t: TelemetrySummaryMetrics): CostTotals {
+  return {
+    requestCount: t.requestCount,
+    inputTokens: t.inputTokens,
+    outputTokens: t.outputTokens,
+    totalTokens: t.inputTokens + t.outputTokens,
+    estimatedMicroUsd: parseMicroUsd(t.estimatedCostUsd),
+    actualMicroUsd: parseMicroUsd(t.actualCostUsd),
+    pendingActualCostCount: t.pendingActualCostCount,
+    // Event-level reconciliation is sourced from raw events, not the summary.
+    reconciledCount: 0,
+    mismatchCount: 0,
+    pendingReconciliationCount: 0,
+  };
+}
+
+export function summaryToProviderGroups(rows: readonly TelemetrySummaryProvider[]): CostGroup[] {
+  return sortCostGroups(
+    rows.map((r) => ({
+      key: r.providerId && r.providerId.length > 0 ? r.providerId : UNKNOWN_KEY,
+      requestCount: r.requestCount,
+      inputTokens: r.inputTokens,
+      outputTokens: r.outputTokens,
+      totalTokens: r.inputTokens + r.outputTokens,
+      estimatedMicroUsd: parseMicroUsd(r.estimatedCostUsd),
+      actualMicroUsd: parseMicroUsd(r.actualCostUsd),
+      pendingActualCostCount: r.pendingActualCostCount,
+    })),
+  );
+}
+
+/**
+ * Adapt summary byModel rows into the existing modelId-only grouping. The
+ * backend keys byModel on (providerId, modelId); rows sharing a modelId across
+ * providers are collapsed here with exact integer micro-USD arithmetic to keep
+ * the current UI's model identity unchanged.
+ */
+export function summaryToModelGroups(rows: readonly TelemetrySummaryModel[]): CostGroup[] {
+  const map = new Map<string, CostGroup>();
+  for (const r of rows) {
+    const key = r.modelId && r.modelId.length > 0 ? r.modelId : UNKNOWN_KEY;
+    let g = map.get(key);
+    if (!g) {
+      g = {
+        key,
+        requestCount: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        estimatedMicroUsd: 0,
+        actualMicroUsd: 0,
+        pendingActualCostCount: 0,
+      };
+      map.set(key, g);
+    }
+    g.requestCount += r.requestCount;
+    g.inputTokens += r.inputTokens;
+    g.outputTokens += r.outputTokens;
+    g.totalTokens += r.inputTokens + r.outputTokens;
+    g.estimatedMicroUsd += parseMicroUsd(r.estimatedCostUsd);
+    g.actualMicroUsd += parseMicroUsd(r.actualCostUsd);
+    g.pendingActualCostCount += r.pendingActualCostCount;
+  }
+  return sortCostGroups([...map.values()]);
 }

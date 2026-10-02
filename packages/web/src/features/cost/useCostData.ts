@@ -2,7 +2,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { TelemetryEvent } from "../../types/index.js";
-import { listTelemetryEvents } from "../../lib/api/telemetry.js";
+import {
+  getTelemetrySummary,
+  listTelemetryEvents,
+  type TelemetrySummaryResponse,
+} from "../../lib/api/telemetry.js";
 import { getCatalog, type CatalogResponse } from "../../lib/api/catalog.js";
 import { getReconciliationMetrics, type ReconciliationMetrics } from "../../lib/api/metrics.js";
 import { getEnvironment } from "../../lib/env.js";
@@ -21,20 +25,13 @@ const RANGE_LABEL: Record<CostRange, string> = {
   "30d": "Last 30 days",
 };
 
-const PAGE_SIZE = 500;
-/** Safety cap: at most MAX_PAGES × PAGE_SIZE events fetched for one window. */
-const MAX_PAGES = 10;
+/** Recent-request rows the Cost Dashboard renders; the raw-event fetch is bounded to this. */
+const RECENT_LIMIT = 15;
 
 export interface CostWindow {
   since: string;
   until: string;
   label: string;
-}
-
-export interface CostEventsResult {
-  events: TelemetryEvent[];
-  /** True when the safety cap stopped pagination before the window was exhausted. */
-  truncated: boolean;
 }
 
 export interface UseCostDataResult {
@@ -45,7 +42,8 @@ export interface UseCostDataResult {
   modelId: string;
   setModelId: (v: string) => void;
   window: CostWindow;
-  events: Async<CostEventsResult>;
+  summary: Async<TelemetrySummaryResponse>;
+  events: Async<TelemetryEvent[]>;
   metrics: Async<ReconciliationMetrics>;
   catalog: Async<CatalogResponse>;
   refresh: () => void;
@@ -67,7 +65,8 @@ export function useCostData(): UseCostDataResult {
     const since = new Date(until.getTime() - RANGE_MS["7d"]);
     return { since: since.toISOString(), until: until.toISOString(), label: RANGE_LABEL["7d"] };
   });
-  const [events, setEvents] = useState<Async<CostEventsResult>>({ status: "loading" });
+  const [summary, setSummary] = useState<Async<TelemetrySummaryResponse>>({ status: "loading" });
+  const [events, setEvents] = useState<Async<TelemetryEvent[]>>({ status: "loading" });
   const [metrics, setMetrics] = useState<Async<ReconciliationMetrics>>({ status: "loading" });
   const [catalog, setCatalog] = useState<Async<CatalogResponse>>({ status: "loading" });
   const reqId = useRef(0);
@@ -85,39 +84,45 @@ export function useCostData(): UseCostDataResult {
       label: RANGE_LABEL[range],
     };
     setWin(window);
-    setEvents({ status: "loading" });
 
-    (async () => {
-      try {
-        const all: TelemetryEvent[] = [];
-        let cursor: string | undefined;
-        let pages = 0;
-        let truncated = false;
-        do {
-          const res = await listTelemetryEvents({
-            since: window.since,
-            until: window.until,
-            limit: PAGE_SIZE,
-            ...(cursor ? { cursor } : {}),
-            ...(providerId ? { providerId } : {}),
-            ...(modelId ? { modelId } : {}),
-            ...(env.apiKey ? { apiKey: env.apiKey } : {}),
-            signal,
-          });
-          all.push(...res.events);
-          cursor = res.nextCursor ?? undefined;
-          pages += 1;
-          if (cursor && pages >= MAX_PAGES) {
-            truncated = true;
-            break;
-          }
-        } while (cursor);
-        if (id === reqId.current) setEvents({ status: "ready", data: { events: all, truncated } });
-      } catch (err) {
-        if (signal.aborted || id !== reqId.current) return;
-        setEvents({ status: "error", message: errMessage(err, "Telemetry unavailable") });
-      }
-    })();
+    const keyOpt = env.apiKey ? { apiKey: env.apiKey } : {};
+
+    // Aggregate totals + provider/model breakdowns (server-aggregated, unbounded window count).
+    setSummary({ status: "loading" });
+    getTelemetrySummary({
+      since: window.since,
+      until: window.until,
+      ...(providerId ? { providerId } : {}),
+      ...(modelId ? { modelId } : {}),
+      ...keyOpt,
+      signal,
+    })
+      .then((data) => {
+        if (id === reqId.current) setSummary({ status: "ready", data });
+      })
+      .catch((err) => {
+        if (!signal.aborted && id === reqId.current)
+          setSummary({ status: "error", message: errMessage(err, "Summary unavailable") });
+      });
+
+    // Bounded raw-event fetch: only for RecentRequests + event-level reconciliation context.
+    setEvents({ status: "loading" });
+    listTelemetryEvents({
+      since: window.since,
+      until: window.until,
+      limit: RECENT_LIMIT,
+      ...(providerId ? { providerId } : {}),
+      ...(modelId ? { modelId } : {}),
+      ...keyOpt,
+      signal,
+    })
+      .then((res) => {
+        if (id === reqId.current) setEvents({ status: "ready", data: res.events });
+      })
+      .catch((err) => {
+        if (!signal.aborted && id === reqId.current)
+          setEvents({ status: "error", message: errMessage(err, "Telemetry unavailable") });
+      });
 
     setMetrics({ status: "loading" });
     getReconciliationMetrics(signal)
@@ -130,7 +135,7 @@ export function useCostData(): UseCostDataResult {
       });
 
     setCatalog({ status: "loading" });
-    getCatalog({ ...(env.apiKey ? { apiKey: env.apiKey } : {}), signal })
+    getCatalog({ ...keyOpt, signal })
       .then((data) => {
         if (id === reqId.current) setCatalog({ status: "ready", data });
       })
@@ -152,6 +157,7 @@ export function useCostData(): UseCostDataResult {
     modelId,
     setModelId,
     window: win,
+    summary,
     events,
     metrics,
     catalog,

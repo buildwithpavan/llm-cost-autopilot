@@ -14,10 +14,11 @@ import type { CatalogResponse } from "../../lib/api/catalog.js";
 import type { Async } from "../overview/overview-model.js";
 import { useCostData, type CostRange } from "./useCostData.js";
 import {
-  deriveCostTotals,
-  deriveModelCost,
-  deriveProviderCost,
+  deriveReconciliationSummary,
   formatMicroUsd,
+  summaryToModelGroups,
+  summaryToProviderGroups,
+  summaryToTotals,
   type CostGroup,
 } from "./cost-model.js";
 import styles from "./Cost.module.css";
@@ -35,13 +36,24 @@ function usd(micro: number): string {
 
 export function CostView() {
   const env = useMemo(() => getEnvironment(), []);
-  const { range, setRange, providerId, setProviderId, modelId, setModelId, window, events, metrics, catalog } =
+  const { range, setRange, providerId, setProviderId, modelId, setModelId, window, summary, events, metrics, catalog } =
     useCostData();
 
-  const ready = events.status === "ready" ? events.data : null;
-  const totals = useMemo(() => (ready ? deriveCostTotals(ready.events) : null), [ready]);
-  const providers = useMemo(() => (ready ? deriveProviderCost(ready.events) : []), [ready]);
-  const models = useMemo(() => (ready ? deriveModelCost(ready.events) : []), [ready]);
+  const summaryReady = summary.status === "ready" ? summary.data : null;
+  const totals = useMemo(() => (summaryReady ? summaryToTotals(summaryReady.totals) : null), [summaryReady]);
+  const providers = useMemo(
+    () => (summaryReady ? summaryToProviderGroups(summaryReady.byProvider) : []),
+    [summaryReady],
+  );
+  const models = useMemo(() => (summaryReady ? summaryToModelGroups(summaryReady.byModel) : []), [summaryReady]);
+
+  // Event-level reconciliation context comes from the bounded raw-event fetch (not authoritative).
+  const eventsReady = events.status === "ready" ? events.data : null;
+  const reconContext = useMemo(() => {
+    if (!eventsReady) return null;
+    const s = deriveReconciliationSummary(eventsReady);
+    return { reconciledCount: s.reconciled, mismatchCount: s.mismatch, pendingReconciliationCount: s.pending };
+  }, [eventsReady]);
 
   const catalogData = catalog.status === "ready" ? catalog.data : null;
   const providerOptions = useMemo(
@@ -57,15 +69,15 @@ export function CostView() {
   );
 
   const connection =
-    events.status === "loading" ? "connecting" : events.status === "error" ? "error" : "idle";
+    summary.status === "loading" ? "connecting" : summary.status === "error" ? "error" : "idle";
 
-  const windowCount = ready?.events.length ?? 0;
+  const windowCount = summaryReady?.totals.requestCount ?? 0;
 
   return (
     <AppShell
       connection={connection}
       envLabel={env.envLabel}
-      healthy={events.status !== "error"}
+      healthy={summary.status !== "error"}
       version={env.appVersion}
       activeKey="Cost"
     >
@@ -118,13 +130,8 @@ export function CostView() {
         <div className={styles.windowBar}>
           <span className={styles.windowLabel}>{window.label}</span>
           <span className={styles.windowMeta} title={`${formatClockTime(window.since)} – ${formatClockTime(window.until)}`}>
-            {events.status === "ready" ? `${windowCount} request${windowCount === 1 ? "" : "s"} in window` : "…"}
+            {summary.status === "ready" ? `${windowCount} request${windowCount === 1 ? "" : "s"} in window` : "…"}
           </span>
-          {ready?.truncated ? (
-            <span className={styles.truncated} role="status">
-              <AlertTriangle size={12} aria-hidden /> Truncated at the fetch safety cap — totals below are a partial subset of this window.
-            </span>
-          ) : null}
         </div>
 
         {/* KPI row -------------------------------------------------------- */}
@@ -132,26 +139,26 @@ export function CostView() {
           <Kpi
             icon={<Wallet size={14} color="var(--accent-primary)" aria-hidden />}
             label="Estimated cost — selected window"
-            section={events}
+            section={summary}
             value={totals ? usd(totals.estimatedMicroUsd) : ""}
           />
           <Kpi
             icon={<Coins size={14} color="var(--success)" aria-hidden />}
             label="Actual cost — selected window"
-            section={events}
+            section={summary}
             value={totals ? usd(totals.actualMicroUsd) : ""}
             sub={totals ? `${totals.pendingActualCostCount} pending reconciliation` : undefined}
           />
           <Kpi
             icon={<Hash size={14} color="var(--accent-cyan)" aria-hidden />}
             label="Requests — selected window"
-            section={events}
+            section={summary}
             value={totals ? formatInt(totals.requestCount) : ""}
           />
           <Kpi
             icon={<Boxes size={14} color="var(--accent-purple)" aria-hidden />}
             label="Total tokens — selected window"
-            section={events}
+            section={summary}
             value={totals ? formatTokens(totals.totalTokens) : ""}
             sub={totals ? `${formatTokens(totals.inputTokens)} in · ${formatTokens(totals.outputTokens)} out` : undefined}
           />
@@ -162,14 +169,14 @@ export function CostView() {
           <BreakdownPanel
             title="Provider breakdown"
             icon={<Server size={13} aria-hidden />}
-            section={events}
+            section={summary}
             groups={providers}
             keyHeader="Provider"
           />
           <BreakdownPanel
             title="Model breakdown"
             icon={<Boxes size={13} aria-hidden />}
-            section={events}
+            section={summary}
             groups={models}
             keyHeader="Model"
           />
@@ -177,7 +184,7 @@ export function CostView() {
 
         {/* Reconciliation + Pricing -------------------------------------- */}
         <div className={styles.grid2}>
-          <ReconciliationPanel metrics={metrics} totals={totals} />
+          <ReconciliationPanel metrics={metrics} totals={reconContext} />
           <PricingPanel catalog={catalog} />
         </div>
 
@@ -366,7 +373,7 @@ function PricingPanel({ catalog }: { catalog: Async<CatalogResponse> }) {
   );
 }
 
-function RecentRequests({ section }: { section: Async<{ events: TelemetryEvent[]; truncated: boolean }> }) {
+function RecentRequests({ section }: { section: Async<TelemetryEvent[]> }) {
   if (section.status === "loading") {
     return (
       <div className={styles.skelStack}>
@@ -381,7 +388,7 @@ function RecentRequests({ section }: { section: Async<{ events: TelemetryEvent[]
       </div>
     );
   }
-  const rows = section.data.events.slice(0, 15);
+  const rows = section.data.slice(0, 15);
   if (rows.length === 0) return <div className={styles.empty}>No requests in this window.</div>;
   return (
     <div className={styles.reqList}>
