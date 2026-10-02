@@ -140,6 +140,14 @@ Management API (all Bearer-authenticated, operator-facing):
 
 CLI mirror: `lca budgets list \| get <id> \| create \| update <id> \| delete <id> \| status`. Monetary values are decimal strings end to end (never floated).
 
+Cost Dashboard: `/cost` renders a read-only **Budget guardrails** panel from `GET /v1/budgets/status` as an independent async source (its loading/error/empty state never blocks the summary KPIs, breakdowns, reconciliation, or catalog — and vice versa). Utilization is shown as a percentage derived from the backend decimal ratio (no client-side money math). The panel reflects the **backend-defined current budget period** (daily / rolling_30d); the dashboard's 24h/7d/30d range filter and provider/model filters do **not** change the budget window. No budget editing/CRUD and no client selector are exposed in the UI (management is via API/CLI).
+
+Metrics (operator-level, exposed on the public `/metrics` endpoint; **no per-client/per-budget labels** to keep cardinality bounded):
+- `lca_budget_utilization` — **maximum** current utilization (persisted estimated spend ÷ limit) across **all enabled configured budgets**; `0` when none. Basis is persisted `estimatedCostUsd`, **not** hypothetical current-request cost.
+- `lca_budget_alert_active` — `1` when **any** enabled configured budget is at or over its limit (exact Decimal `spend >= limit`); `0` otherwise.
+
+These are operational aggregates over all configured budgets (not tenant isolation), maintained by a periodic background loop.
+
 ## CLI
 
 Every HTTP capability has a mirror in `lca`. See [specs/001-llm-routing-mvp/contracts/cli.md](specs/001-llm-routing-mvp/contracts/cli.md) and the parity test at [packages/api/test/contract/parity.test.ts](packages/api/test/contract/parity.test.ts).

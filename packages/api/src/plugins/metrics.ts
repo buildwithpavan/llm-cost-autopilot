@@ -7,6 +7,8 @@ export interface Metrics {
   routingOverheadMs: Histogram<string>;
   reconciliationRate: Gauge<string>;
   reconciliationAlertActive: Gauge<string>;
+  budgetUtilization: Gauge<string>;
+  budgetAlertActive: Gauge<string>;
 }
 
 export function createMetrics(): Metrics {
@@ -47,6 +49,21 @@ export function createMetrics(): Metrics {
     registers: [registry],
   });
 
+  // Operator-level budget aggregates. No per-client/per-budget labels (bounded
+  // cardinality). Basis is persisted estimated spend — NOT hypothetical current
+  // request cost. Semantics mirror GET /v1/budgets/status.
+  const budgetUtilization = new Gauge({
+    name: "lca_budget_utilization",
+    help: "Maximum current utilization (persisted estimated spend / limit) across all enabled configured budgets; 0 when none.",
+    registers: [registry],
+  });
+
+  const budgetAlertActive = new Gauge({
+    name: "lca_budget_alert_active",
+    help: "1 when any enabled configured budget is at or over its limit (exact spend >= limit); 0 otherwise.",
+    registers: [registry],
+  });
+
   return {
     registry,
     requestsTotal,
@@ -54,6 +71,8 @@ export function createMetrics(): Metrics {
     routingOverheadMs,
     reconciliationRate,
     reconciliationAlertActive,
+    budgetUtilization,
+    budgetAlertActive,
   };
 }
 

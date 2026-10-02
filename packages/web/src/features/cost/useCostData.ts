@@ -9,6 +9,7 @@ import {
 } from "../../lib/api/telemetry.js";
 import { getCatalog, type CatalogResponse } from "../../lib/api/catalog.js";
 import { getReconciliationMetrics, type ReconciliationMetrics } from "../../lib/api/metrics.js";
+import { getBudgetStatus, type BudgetStatusResponse } from "../../lib/api/budgets.js";
 import { getEnvironment } from "../../lib/env.js";
 import type { Async } from "../overview/overview-model.js";
 
@@ -46,6 +47,7 @@ export interface UseCostDataResult {
   events: Async<TelemetryEvent[]>;
   metrics: Async<ReconciliationMetrics>;
   catalog: Async<CatalogResponse>;
+  budgets: Async<BudgetStatusResponse>;
   refresh: () => void;
 }
 
@@ -69,7 +71,9 @@ export function useCostData(): UseCostDataResult {
   const [events, setEvents] = useState<Async<TelemetryEvent[]>>({ status: "loading" });
   const [metrics, setMetrics] = useState<Async<ReconciliationMetrics>>({ status: "loading" });
   const [catalog, setCatalog] = useState<Async<CatalogResponse>>({ status: "loading" });
+  const [budgets, setBudgets] = useState<Async<BudgetStatusResponse>>({ status: "loading" });
   const reqId = useRef(0);
+  const budgetReqId = useRef(0);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -147,6 +151,25 @@ export function useCostData(): UseCostDataResult {
     return () => ctrl.abort();
   }, [env, range, providerId, modelId, tick]);
 
+  // Budget status is an independent operational concern: its window is
+  // backend-defined (daily / rolling_30d), so it is NOT keyed on the selected
+  // range or provider/model filters and never receives since/until.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const { signal } = ctrl;
+    const id = ++budgetReqId.current;
+    setBudgets({ status: "loading" });
+    getBudgetStatus({ ...(env.apiKey ? { apiKey: env.apiKey } : {}), signal })
+      .then((data) => {
+        if (id === budgetReqId.current) setBudgets({ status: "ready", data });
+      })
+      .catch((err) => {
+        if (!signal.aborted && id === budgetReqId.current)
+          setBudgets({ status: "error", message: errMessage(err, "Budgets unavailable") });
+      });
+    return () => ctrl.abort();
+  }, [env, tick]);
+
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   return {
@@ -161,6 +184,7 @@ export function useCostData(): UseCostDataResult {
     events,
     metrics,
     catalog,
+    budgets,
     refresh,
   };
 }

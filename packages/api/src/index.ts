@@ -19,6 +19,7 @@ import { loadConfig } from "./config.js";
 import { buildServer } from "./server.js";
 import { startTracing } from "./plugins/tracing.js";
 import { startReconciliationMetricLoop } from "./plugins/reconciliation-metric.js";
+import { startBudgetMetricLoop } from "./plugins/budget-metric.js";
 
 export const API_VERSION = "0.1.0";
 
@@ -61,6 +62,7 @@ async function main(): Promise<void> {
   const retentionJob = createRetentionJob(db);
   retentionJob.start();
   const stopReconciliationLoop = startReconciliationMetricLoop(db);
+  const stopBudgetMetricLoop = startBudgetMetricLoop(db, budgetStore);
   const healthScheduler = createHealthScheduler(db, () => registry.list());
   healthScheduler.start();
 
@@ -72,6 +74,7 @@ async function main(): Promise<void> {
       retentionJob.stop();
       healthScheduler.stop();
       stopReconciliationLoop();
+      stopBudgetMetricLoop();
       await telemetryWriter.close();
       await app.close();
       await db.destroy();

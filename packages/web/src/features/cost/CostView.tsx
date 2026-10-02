@@ -11,6 +11,7 @@ import { decisionSourceMeta, statusMeta, type Semantic } from "../routing-explor
 import type { TelemetryEvent } from "../../types/index.js";
 import type { ReconciliationMetrics } from "../../lib/api/metrics.js";
 import type { CatalogResponse } from "../../lib/api/catalog.js";
+import type { BudgetStatusResponse } from "../../lib/api/budgets.js";
 import type { Async } from "../overview/overview-model.js";
 import { useCostData, type CostRange } from "./useCostData.js";
 import {
@@ -21,6 +22,14 @@ import {
   summaryToTotals,
   type CostGroup,
 } from "./cost-model.js";
+import {
+  budgetActionLabel,
+  budgetPeriodLabel,
+  budgetScopeLabel,
+  budgetStatusTone,
+  formatUtilizationPercent,
+  utilizationTrackValue,
+} from "./budget-model.js";
 import styles from "./Cost.module.css";
 
 const RANGE_OPTIONS: { value: CostRange; label: string }[] = [
@@ -36,7 +45,7 @@ function usd(micro: number): string {
 
 export function CostView() {
   const env = useMemo(() => getEnvironment(), []);
-  const { range, setRange, providerId, setProviderId, modelId, setModelId, window, summary, events, metrics, catalog } =
+  const { range, setRange, providerId, setProviderId, modelId, setModelId, window, summary, events, metrics, catalog, budgets } =
     useCostData();
 
   const summaryReady = summary.status === "ready" ? summary.data : null;
@@ -164,6 +173,9 @@ export function CostView() {
           />
         </div>
 
+        {/* Budget guardrails --------------------------------------------- */}
+        <BudgetPanel section={budgets} />
+
         {/* Provider + Model breakdowns ----------------------------------- */}
         <div className={styles.grid2}>
           <BreakdownPanel
@@ -200,6 +212,64 @@ export function CostView() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function BudgetPanel({ section }: { section: Async<BudgetStatusResponse> }) {
+  return (
+    <div className={styles.panel}>
+      <div className={styles.panelHead}>
+        <span><ShieldCheck size={13} color="var(--accent-primary)" aria-hidden /> Budget guardrails</span>
+        <span className={styles.windowMeta}>Current budget period (backend-defined) — independent of the range filter</span>
+      </div>
+      {section.status === "loading" ? (
+        <div className={styles.skelStack}>
+          {Array.from({ length: 2 }, (_, i) => <div key={i} className={styles.skelBar} />)}
+        </div>
+      ) : section.status === "error" ? (
+        <div className={styles.sectionError} role="alert">
+          <AlertTriangle size={14} aria-hidden /> {section.message}
+        </div>
+      ) : section.data.budgets.length === 0 ? (
+        <div className={styles.empty}>No active budgets configured.</div>
+      ) : (
+        <div className={styles.tableWrap}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Scope</th>
+                <th>Period</th>
+                <th>Action</th>
+                <th className={styles.num}>Spend / Limit</th>
+                <th className={styles.num}>Remaining</th>
+                <th className={styles.num}>Utilization</th>
+                <th>Status</th>
+                <th className={styles.share} aria-label="Utilization" />
+              </tr>
+            </thead>
+            <tbody>
+              {section.data.budgets.map((b) => {
+                const tone = budgetStatusTone(b.status);
+                return (
+                  <tr key={b.budgetId}>
+                    <td className={styles.mono} title={b.clientId ?? undefined}>{budgetScopeLabel(b)}</td>
+                    <td>{budgetPeriodLabel(b.period)}</td>
+                    <td>{budgetActionLabel(b.action)}</td>
+                    <td className={styles.num}>{formatUsd(b.currentSpendUsd)} / {formatUsd(b.limitUsd)}</td>
+                    <td className={styles.num}>{formatUsd(b.remainingUsd)}</td>
+                    <td className={styles.num}>{formatUtilizationPercent(b.utilization)}</td>
+                    <td><Badge meta={tone} /></td>
+                    <td className={styles.share}>
+                      <TrackBar value={utilizationTrackValue(b.utilization)} max={1} color={tone.color} width={90} height={8} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
