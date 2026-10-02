@@ -41,6 +41,18 @@ export function budgetScopeLabel(row: Pick<BudgetStatusRow, "scope" | "clientId"
   return row.scope === "global" ? "Global" : `Client${row.clientId ? ` · ${row.clientId}` : ""}`;
 }
 
+/** Audit decision (warned/blocked) → distinct descriptive tone. Backend decision is authoritative. */
+export function budgetDecisionTone(decision: "warned" | "blocked"): BudgetTone {
+  return decision === "blocked"
+    ? { label: "BLOCKED", color: "var(--error)", bg: "rgba(242, 89, 89, 0.12)", border: "rgba(242, 89, 89, 0.42)" }
+    : { label: "WARNED", color: "var(--warn)", bg: "rgba(242, 171, 71, 0.12)", border: "rgba(242, 171, 71, 0.42)" };
+}
+
+/** Per-evaluation outcome label (allow/warn/block) as recorded by the backend. */
+export function evaluationDecisionLabel(decision: "allow" | "warn" | "block"): string {
+  return decision === "block" ? "Block" : decision === "warn" ? "Warn" : "Allow";
+}
+
 export function budgetPeriodLabel(period: BudgetStatusRow["period"]): string {
   return period === "daily" ? "Daily" : "Rolling 30d";
 }

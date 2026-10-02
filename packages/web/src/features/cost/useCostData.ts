@@ -9,7 +9,7 @@ import {
 } from "../../lib/api/telemetry.js";
 import { getCatalog, type CatalogResponse } from "../../lib/api/catalog.js";
 import { getReconciliationMetrics, type ReconciliationMetrics } from "../../lib/api/metrics.js";
-import { getBudgetStatus, type BudgetStatusResponse } from "../../lib/api/budgets.js";
+import { getBudgetStatus, getBudgetDecisions, type BudgetStatusResponse, type BudgetDecisionsResponse } from "../../lib/api/budgets.js";
 import { getEnvironment } from "../../lib/env.js";
 import type { Async } from "../overview/overview-model.js";
 
@@ -28,6 +28,9 @@ const RANGE_LABEL: Record<CostRange, string> = {
 
 /** Recent-request rows the Cost Dashboard renders; the raw-event fetch is bounded to this. */
 const RECENT_LIMIT = 15;
+
+/** Recent budget decisions shown in the audit panel (activity view, not aggregation). */
+const BUDGET_DECISIONS_LIMIT = 20;
 
 export interface CostWindow {
   since: string;
@@ -48,6 +51,7 @@ export interface UseCostDataResult {
   metrics: Async<ReconciliationMetrics>;
   catalog: Async<CatalogResponse>;
   budgets: Async<BudgetStatusResponse>;
+  budgetDecisions: Async<BudgetDecisionsResponse>;
   refresh: () => void;
 }
 
@@ -72,8 +76,10 @@ export function useCostData(): UseCostDataResult {
   const [metrics, setMetrics] = useState<Async<ReconciliationMetrics>>({ status: "loading" });
   const [catalog, setCatalog] = useState<Async<CatalogResponse>>({ status: "loading" });
   const [budgets, setBudgets] = useState<Async<BudgetStatusResponse>>({ status: "loading" });
+  const [budgetDecisions, setBudgetDecisions] = useState<Async<BudgetDecisionsResponse>>({ status: "loading" });
   const reqId = useRef(0);
   const budgetReqId = useRef(0);
+  const budgetDecReqId = useRef(0);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -170,6 +176,32 @@ export function useCostData(): UseCostDataResult {
     return () => ctrl.abort();
   }, [env, tick]);
 
+  // Recent budget decisions (warned/blocked) audit feed. Uses the dashboard's
+  // selected time window (range), but is NOT keyed on provider/model filters.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const { signal } = ctrl;
+    const id = ++budgetDecReqId.current;
+    const until = new Date();
+    const since = new Date(until.getTime() - RANGE_MS[range]);
+    setBudgetDecisions({ status: "loading" });
+    getBudgetDecisions({
+      since: since.toISOString(),
+      until: until.toISOString(),
+      limit: BUDGET_DECISIONS_LIMIT,
+      ...(env.apiKey ? { apiKey: env.apiKey } : {}),
+      signal,
+    })
+      .then((data) => {
+        if (id === budgetDecReqId.current) setBudgetDecisions({ status: "ready", data });
+      })
+      .catch((err) => {
+        if (!signal.aborted && id === budgetDecReqId.current)
+          setBudgetDecisions({ status: "error", message: errMessage(err, "Budget decisions unavailable") });
+      });
+    return () => ctrl.abort();
+  }, [env, range, tick]);
+
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   return {
@@ -185,6 +217,7 @@ export function useCostData(): UseCostDataResult {
     metrics,
     catalog,
     budgets,
+    budgetDecisions,
     refresh,
   };
 }

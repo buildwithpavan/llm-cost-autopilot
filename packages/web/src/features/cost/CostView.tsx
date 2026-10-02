@@ -11,7 +11,7 @@ import { decisionSourceMeta, statusMeta, type Semantic } from "../routing-explor
 import type { TelemetryEvent } from "../../types/index.js";
 import type { ReconciliationMetrics } from "../../lib/api/metrics.js";
 import type { CatalogResponse } from "../../lib/api/catalog.js";
-import type { BudgetStatusResponse } from "../../lib/api/budgets.js";
+import type { BudgetStatusResponse, BudgetDecisionsResponse, BudgetDecisionRecord } from "../../lib/api/budgets.js";
 import type { Async } from "../overview/overview-model.js";
 import { useCostData, type CostRange } from "./useCostData.js";
 import {
@@ -24,9 +24,11 @@ import {
 } from "./cost-model.js";
 import {
   budgetActionLabel,
+  budgetDecisionTone,
   budgetPeriodLabel,
   budgetScopeLabel,
   budgetStatusTone,
+  evaluationDecisionLabel,
   formatUtilizationPercent,
   utilizationTrackValue,
 } from "./budget-model.js";
@@ -45,7 +47,7 @@ function usd(micro: number): string {
 
 export function CostView() {
   const env = useMemo(() => getEnvironment(), []);
-  const { range, setRange, providerId, setProviderId, modelId, setModelId, window, summary, events, metrics, catalog, budgets } =
+  const { range, setRange, providerId, setProviderId, modelId, setModelId, window, summary, events, metrics, catalog, budgets, budgetDecisions } =
     useCostData();
 
   const summaryReady = summary.status === "ready" ? summary.data : null;
@@ -176,6 +178,9 @@ export function CostView() {
         {/* Budget guardrails --------------------------------------------- */}
         <BudgetPanel section={budgets} />
 
+        {/* Recent budget decisions (audit) ------------------------------- */}
+        <BudgetDecisionsPanel section={budgetDecisions} rangeLabel={window.label} />
+
         {/* Provider + Model breakdowns ----------------------------------- */}
         <div className={styles.grid2}>
           <BreakdownPanel
@@ -269,6 +274,87 @@ function BudgetPanel({ section }: { section: Async<BudgetStatusResponse> }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function BudgetDecisionsPanel({
+  section,
+  rangeLabel,
+}: {
+  section: Async<BudgetDecisionsResponse>;
+  rangeLabel: string;
+}) {
+  return (
+    <div className={styles.panel}>
+      <div className={styles.panelHead}>
+        <span><AlertTriangle size={13} color="var(--warn)" aria-hidden /> Recent Budget Decisions</span>
+        <span className={styles.windowMeta}>Warned / blocked decisions within {rangeLabel.toLowerCase()}</span>
+      </div>
+      {section.status === "loading" ? (
+        <div className={styles.skelStack}>
+          {Array.from({ length: 2 }, (_, i) => <div key={i} className={styles.skelBar} />)}
+        </div>
+      ) : section.status === "error" ? (
+        <div className={styles.sectionError} role="alert">
+          <AlertTriangle size={14} aria-hidden /> {section.message}
+        </div>
+      ) : section.data.decisions.length === 0 ? (
+        <div className={styles.empty}>No budget decisions in this window.</div>
+      ) : (
+        <div className={styles.decList}>
+          {section.data.decisions.map((d) => (
+            <BudgetDecisionItem key={d.eventId} decision={d} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BudgetDecisionItem({ decision }: { decision: BudgetDecisionRecord }) {
+  const tone = budgetDecisionTone(decision.decision);
+  return (
+    <details className={styles.decItem}>
+      <summary className={styles.decSummary}>
+        <Badge meta={tone} />
+        <span className={styles.decTime} title={formatClockTime(decision.decidedAt)}>
+          {formatRelativeTime(decision.decidedAt)}
+        </span>
+        <span className={styles.decClient} title={decision.clientId}>{decision.clientId}</span>
+        <span className={styles.decCost}>est. {formatUsd(decision.requestEstimatedCostUsd)}</span>
+        <span className={styles.decCount}>
+          {decision.applicableBudgetIds.length} budget{decision.applicableBudgetIds.length === 1 ? "" : "s"}
+          {decision.blockedBudgetIds.length > 0 ? ` · ${decision.blockedBudgetIds.length} blocked` : ""}
+        </span>
+      </summary>
+      <div className={styles.decBody}>
+        {decision.evaluations.map((e) => (
+          <div key={e.budgetId} className={styles.decEval}>
+            <div className={styles.decEvalHead}>
+              <span className={styles.decEvalId} title={e.budgetId}>{e.budgetId}</span>
+              <span className={styles.decCount}>
+                {budgetScopeLabel(e)} · {budgetPeriodLabel(e.period)} · {budgetActionLabel(e.action)} · {evaluationDecisionLabel(e.decision)}
+              </span>
+            </div>
+            <div className={styles.decEvalGrid}>
+              <EvalCell label="Current spend" value={formatUsd(e.currentSpendUsd)} />
+              <EvalCell label="Projected" value={formatUsd(e.projectedSpendUsd)} />
+              <EvalCell label="Limit" value={formatUsd(e.limitUsd)} />
+              <EvalCell label="Remaining" value={formatUsd(e.remainingUsd)} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function EvalCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.decEvalCell}>
+      <span className={styles.decEvalLabel}>{label}</span>
+      <span className={styles.decEvalVal}>{value}</span>
     </div>
   );
 }

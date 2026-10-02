@@ -433,3 +433,116 @@
   font-size: 11px;
   white-space: nowrap;
 }
+
+/* Recent budget decisions ------------------------------------------------- */
+.decList {
+  display: flex;
+  flex-direction: column;
+}
+
+.decItem {
+  border-bottom: 1px solid var(--border-default);
+}
+.decItem:last-child {
+  border-bottom: none;
+}
+
+.decSummary {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+.decSummary::-webkit-details-marker {
+  display: none;
+}
+.decSummary:hover {
+  background: var(--bg-inset);
+}
+.decItem > summary:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.decTime {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.decClient {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.decCost {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.decCount {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.decBody {
+  padding: 2px 16px 14px;
+}
+
+.decEval {
+  padding: 8px 0;
+  border-top: 1px dashed var(--border-default);
+}
+
+.decEvalHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.decEvalId {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.decEvalGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 6px 12px;
+  margin-top: 6px;
+}
+
+.decEvalCell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.decEvalLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.decEvalVal {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+

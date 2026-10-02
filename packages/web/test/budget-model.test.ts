@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   budgetActionLabel,
+  budgetDecisionTone,
   budgetPeriodLabel,
   budgetScopeLabel,
   budgetStatusTone,
+  evaluationDecisionLabel,
   formatUtilizationPercent,
   utilizationTrackValue,
 } from "../src/features/cost/budget-model";
@@ -55,5 +57,23 @@ describe("utilizationTrackValue", () => {
     expect(utilizationTrackValue("0.500000")).toBe(0.5);
     expect(utilizationTrackValue("0")).toBe(0);
     expect(utilizationTrackValue("2.000000")).toBe(1);
+  });
+});
+
+describe("budgetDecisionTone", () => {
+  it("renders WARNED and BLOCKED as visually distinct tones", () => {
+    const warned = budgetDecisionTone("warned");
+    const blocked = budgetDecisionTone("blocked");
+    expect(warned.label).toBe("WARNED");
+    expect(blocked.label).toBe("BLOCKED");
+    expect(warned.color).not.toBe(blocked.color);
+  });
+});
+
+describe("evaluationDecisionLabel", () => {
+  it("labels per-budget evaluation outcomes", () => {
+    expect(evaluationDecisionLabel("block")).toBe("Block");
+    expect(evaluationDecisionLabel("warn")).toBe("Warn");
+    expect(evaluationDecisionLabel("allow")).toBe("Allow");
   });
 });
