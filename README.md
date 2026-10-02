@@ -100,8 +100,9 @@ All non-`/v1/health` routes require `Authorization: Bearer <api_key>`. The canon
 | `GET /v1/telemetry/events` | Query full-fidelity telemetry (cursor pagination) |
 | `GET /v1/telemetry/summary` | Bounded recent aggregate over `telemetry_events` (Bearer). Filters: `since`, `until`, `clientId`, `providerId`, `modelId`. Returns `totals`, `byProvider[]`, `byModel[]` (`requestCount`, `inputTokens`, `outputTokens`, `estimatedCostUsd`, `actualCostUsd`, `pendingActualCostCount`). Costs are decimal strings; `actualCostUsd` sums only non-null actuals and pending rows are counted in `pendingActualCostCount` (never as `$0`). Window defaults to the last 30 days (`until`=now); the maximum supported window is 30 days (aligned with full-fidelity retention) — larger ranges return `400 invalid_request`. Aggregates recent telemetry only; never returns raw events. |
 | `GET /v1/telemetry/rollups` | Query daily rollups (12-month window) |
-| `GET /v1/telemetry/replay/{eventId}` | Reproduce a stored routing decision (no provider call) |
-| `GET /v1/telemetry/events/stream` | Server-Sent Events stream of live telemetry |
+| `GET /v1/telemetry/replay/{eventId}` | Reproduce a stored routing decision (no provider call). `422 not_replayable` for a budget-decision id. |
+| `GET /v1/telemetry/budget-decisions` | Durable budget decision audit (warned/blocked). Filters: `clientId`, `since`, `until`, `limit`. |
+| `GET /v1/telemetry/events/stream` | Server-Sent Events stream of live telemetry (includes `budget.evaluated`) |
 | `GET \| POST /v1/operator/rules` | List / create operator routing rules |
 | `PATCH \| DELETE /v1/operator/rules/{ruleId}` | Update / remove a rule |
 | `GET \| POST \| DELETE /v1/keys[/{keyId}]` | Manage API keys (plaintext secret returned only on create) |
@@ -145,6 +146,8 @@ Cost Dashboard: `/cost` renders a read-only **Budget guardrails** panel from `GE
 Metrics (operator-level, exposed on the public `/metrics` endpoint; **no per-client/per-budget labels** to keep cardinality bounded):
 - `lca_budget_utilization` — **maximum** current utilization (persisted estimated spend ÷ limit) across **all enabled configured budgets**; `0` when none. Basis is persisted `estimatedCostUsd`, **not** hypothetical current-request cost.
 - `lca_budget_alert_active` — `1` when **any** enabled configured budget is at or over its limit (exact Decimal `spend >= limit`); `0` otherwise.
+
+Auditability: an applied budget outcome (**warned** or **blocked**) is recorded as a `budget.evaluated` event — live on the SSE stream (`GET /v1/telemetry/events/stream`) and durably in a dedicated `budget_decisions` table (a blocked request is **not** a provider execution, so it is not stored in `telemetry_events`). Durable records are retrievable at `GET /v1/telemetry/budget-decisions` (Bearer; filters `clientId`/`since`/`until`/`limit`) and carry the correlation `eventId`, decision, applicable/blocked budget ids, request estimated cost, and per-budget spend/limit/projected context. Allowed and no-budget requests produce no audit record. The audit write is best-effort at decision time (same eventual-consistency posture as telemetry; no atomic reservation). For a blocked request there is **no** `decision.committed` or provider-execution/completion telemetry, and `GET /v1/telemetry/replay/{eventId}` returns `422 not_replayable` for a budget-decision id (it is never executed).
 
 These are operational aggregates over all configured budgets (not tenant isolation), maintained by a periodic background loop.
 

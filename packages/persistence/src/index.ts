@@ -17,5 +17,7 @@ export { sumEstimatedSpend, spendForBudgets } from "./budgets/spend.js";
 export type { SpendQuery } from "./budgets/spend.js";
 export { computeBudgetMetrics } from "./budgets/metrics.js";
 export type { BudgetMetricsSnapshot } from "./budgets/metrics.js";
+export { writeBudgetDecision, queryBudgetDecisions, budgetDecisionExists } from "./budgets/decisions.js";
+export type { BudgetDecisionRecord, BudgetDecisionFilters } from "./budgets/decisions.js";
 export * from "./telemetry/index.js";
 export const PERSISTENCE_VERSION = "0.1.0";

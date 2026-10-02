@@ -35,6 +35,7 @@ export const streamEventTypeSchema = z.enum([
   "result.completed",
   "result.failed",
   "event.completed",
+  "budget.evaluated",
 ]);
 export type StreamEventType = z.infer<typeof streamEventTypeSchema>;
 
@@ -113,6 +114,36 @@ export const eventCompletedPayloadSchema = z.object({
   event: telemetryEventSchema,
 });
 
+/** Per-budget audit detail for a budget.evaluated stream/audit event. */
+export const budgetEvaluationAuditSchema = z.object({
+  budgetId: z.string(),
+  scope: z.enum(["global", "client"]),
+  clientId: z.string().nullable(),
+  period: z.enum(["daily", "rolling_30d"]),
+  action: z.enum(["block", "warn"]),
+  decision: z.enum(["allow", "warn", "block"]),
+  currentSpendUsd: z.string(),
+  projectedSpendUsd: z.string(),
+  limitUsd: z.string(),
+  remainingUsd: z.string(),
+});
+export type BudgetEvaluationAudit = z.infer<typeof budgetEvaluationAuditSchema>;
+
+/**
+ * Budget decision audit event. A blocked budget decision is NOT a provider
+ * execution — this event is the durable/observable record of the governance
+ * guardrail outcome, emitted for warned/blocked decisions only.
+ */
+export const budgetEvaluatedPayloadSchema = z.object({
+  ...streamEventEnvelope,
+  eventType: z.literal("budget.evaluated"),
+  decision: z.enum(["warned", "blocked"]),
+  requestEstimatedCostUsd: z.string(),
+  applicableBudgetIds: z.array(z.string()),
+  blockedBudgetIds: z.array(z.string()),
+  evaluations: z.array(budgetEvaluationAuditSchema),
+});
+
 export const streamHelloPayloadSchema = z.object({
   ...streamEventEnvelope,
   eventType: z.literal("stream.hello"),
@@ -139,6 +170,7 @@ export const telemetryStreamEventSchema = z.discriminatedUnion("eventType", [
   resultCompletedPayloadSchema,
   resultFailedPayloadSchema,
   eventCompletedPayloadSchema,
+  budgetEvaluatedPayloadSchema,
 ]);
 
 export type TelemetryStreamEvent = z.infer<typeof telemetryStreamEventSchema>;
@@ -152,3 +184,4 @@ export type ExecutionCompletedEvent = z.infer<typeof executionCompletedPayloadSc
 export type ResultCompletedEvent = z.infer<typeof resultCompletedPayloadSchema>;
 export type ResultFailedEvent = z.infer<typeof resultFailedPayloadSchema>;
 export type EventCompletedEvent = z.infer<typeof eventCompletedPayloadSchema>;
+export type BudgetEvaluatedEvent = z.infer<typeof budgetEvaluatedPayloadSchema>;

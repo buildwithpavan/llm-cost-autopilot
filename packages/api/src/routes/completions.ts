@@ -13,7 +13,7 @@ import {
   type NormalizedResponse,
   type RoutingDecision,
 } from "@lca/core";
-import type { OperatorRuleStore, TelemetryWriter } from "@lca/persistence";
+import { writeBudgetDecision, type OperatorRuleStore, type TelemetryWriter } from "@lca/persistence";
 
 import { loadCatalogSnapshot, type AppContext } from "../wiring.js";
 import { buildRoutingDecision, resolveGovernance } from "../routing/resolve-decision.js";
@@ -114,6 +114,38 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
       clientId: normalized.clientId,
       requestEstimatedCostUsd: decision.estimatedCostUsd,
     });
+
+    // Durable + live audit for applied budget outcomes (warned/blocked only).
+    // A blocked decision is a guardrail record, NOT a provider execution.
+    if (budgetResult.decision === "warned" || budgetResult.decision === "blocked") {
+      const auditTs = new Date().toISOString();
+      const applicableBudgetIds = budgetResult.evaluations.map((e) => e.budgetId);
+      // Best-effort, idempotent per eventId; not coupled to provider execution.
+      await writeBudgetDecision(deps.db, {
+        eventId,
+        decidedAt: auditTs,
+        clientId: normalized.clientId,
+        decision: budgetResult.decision,
+        requestEstimatedCostUsd: budgetResult.requestEstimatedCostUsd,
+        applicableBudgetIds,
+        blockedBudgetIds: budgetResult.blockedBudgetIds,
+        evaluations: budgetResult.evaluations,
+      }).catch((err: unknown) => {
+        req.log.error({ err }, "budget decision audit write failed");
+      });
+      bus.publish({
+        eventType: "budget.evaluated",
+        eventId,
+        clientId: normalized.clientId,
+        timestamp: auditTs,
+        decision: budgetResult.decision,
+        requestEstimatedCostUsd: budgetResult.requestEstimatedCostUsd,
+        applicableBudgetIds,
+        blockedBudgetIds: budgetResult.blockedBudgetIds,
+        evaluations: budgetResult.evaluations,
+      });
+    }
+
     if (budgetResult.decision === "blocked") {
       req.log.warn(
         {

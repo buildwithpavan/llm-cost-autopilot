@@ -44,6 +44,22 @@ Before any TelemetryEvent is handed to the persistence layer, it MUST be routed 
 
 The persistence writer MUST refuse to write any event that has not passed through the gate. Detection is via a symbol-branded type (`RedactedTelemetryEvent`) that only the redaction function produces.
 
+## Budget decision audit (`budget.evaluated`)
+
+A budget guardrail outcome is auditable separately from provider execution. When an applicable enabled budget yields a **warned** or **blocked** aggregate decision, the API:
+
+- publishes a `budget.evaluated` stream event on the SSE surface (`GET /v1/telemetry/events/stream`), and
+- durably persists a record to the `budget_decisions` table, retrievable at `GET /v1/telemetry/budget-decisions` (Bearer; filters `clientId` / `since` / `until` / `limit`).
+
+Invariants:
+
+- A **blocked** request is NOT a provider execution. It MUST NOT produce `decision.committed`, any `execution.*`/`result.*` event, or a `telemetry_events` completion row. It is therefore never replayable: `GET /v1/telemetry/replay/{eventId}` MUST return `422 not_replayable` for a budget-decision id.
+- A **warned** request proceeds normally; the `budget.evaluated(warned)` event MUST be observable before any `execution.started` for the same `eventId`, and the warning is also recorded on the completion's `routingRationale`.
+- **Allowed** and **no-budget** requests produce no budget audit record.
+- The record carries `eventId` (correlation id), `decision`, `applicableBudgetIds`, `blockedBudgetIds`, `requestEstimatedCostUsd`, and per-budget `evaluations` (scope, clientId, period, action, decision, currentSpendUsd, projectedSpendUsd, limitUsd, remainingUsd) — all monetary values as decimal strings.
+- The audit write is best-effort at decision time (same eventual-consistency posture as telemetry); it is not an atomic reservation and introduces no transactional coupling to provider execution.
+- The record MUST NOT contain provider secrets, API keys, SQL, or other clients' budget configuration beyond what this operator-facing read already exposes.
+
 ## Attempts chain semantics (FR-033 / FR-034 / FR-035)
 
 - `attempts.length === 1` when either the first attempt succeeded OR the first attempt failed with a non-transient error class (`upstream_4xx`, `invalid_request`, `override_target_missing`, `context_exceeded`, `provider_unavailable`, `terminal_fallback_exhausted`).

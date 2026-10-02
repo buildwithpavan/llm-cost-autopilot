@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { routing, type NormalizedRequest, type RoutingDecision } from "@lca/core";
-import { getEventById, loadActivePricingTable } from "@lca/persistence";
+import { budgetDecisionExists, getEventById, loadActivePricingTable } from "@lca/persistence";
 
 import { loadCatalogSnapshot, type AppContext } from "../wiring.js";
 import { LcaError } from "../plugins/errors.js";
@@ -11,6 +11,15 @@ const plugin: FastifyPluginAsync<AppContext> = async (fastify, deps) => {
     const params = req.params as { eventId: string };
     const event = await getEventById(deps.db, params.eventId);
     if (!event) {
+      // A budget-blocked request has no completion telemetry and is not a
+      // provider execution — never replayable. Reject it explicitly.
+      if (await budgetDecisionExists(deps.db, params.eventId)) {
+        throw new LcaError({
+          httpStatus: 422,
+          code: "not_replayable",
+          message: `event ${params.eventId} is a budget decision, not a completion; it cannot be replayed`,
+        });
+      }
       throw new LcaError({
         httpStatus: 404,
         code: "event_not_found",

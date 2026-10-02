@@ -103,6 +103,18 @@ export interface SpendBudgetsRow {
   updated_at: Generated<Date>;
 }
 
+export interface BudgetDecisionsRow {
+  event_id: string;
+  decided_at: ColumnType<Date, Date | string, Date | string>;
+  client_id: string;
+  decision: "warned" | "blocked";
+  request_estimated_cost_usd: string;
+  applicable_budget_ids: unknown;
+  blocked_budget_ids: unknown;
+  evaluations: unknown;
+  created_at: Generated<Date>;
+}
+
 export interface Database {
   pricing_tables: PricingTablesRow;
   pricing_entries: PricingEntriesRow;
@@ -112,6 +124,7 @@ export interface Database {
   api_keys: ApiKeysRow;
   provider_health_state: ProviderHealthStateRow;
   spend_budgets: SpendBudgetsRow;
+  budget_decisions: BudgetDecisionsRow;
 }
 
 export function createPool(databaseUrl: string): pg.Pool {
