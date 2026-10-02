@@ -1,5 +1,5 @@
 import type { PricingTable, Model } from "@lca/core";
-import type { Db, OperatorRuleStore } from "@lca/persistence";
+import type { Db, OperatorRuleStore, BudgetStore } from "@lca/persistence";
 import { buildCatalog, loadActivePricingTable, readHealthyProviders } from "@lca/persistence";
 import type { ProviderRegistry } from "@lca/providers";
 
@@ -7,6 +7,7 @@ export interface AppContext {
   db: Db;
   registry: ProviderRegistry;
   ruleStore?: OperatorRuleStore;
+  budgetStore?: BudgetStore;
 }
 
 export interface CatalogSnapshot {

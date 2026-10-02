@@ -110,16 +110,23 @@ Correlation is via `x-request-id` (echoed on the response and used as `Telemetry
 
 ## Budget controls (in progress)
 
-Spend guardrails are under implementation. Phase 1 (this iteration) ships the backend foundation only — a budget domain model, deterministic evaluation, and a persistent budget store (`spend_budgets`); enforcement, API routes, CLI, and UI follow in later phases.
+Spend guardrails are under implementation. The backend domain model, persistent store (`spend_budgets`), and enforcement on the live completion/preview paths are in place; CRUD/status APIs, CLI, UI, and budget metrics follow in later phases.
 
 V1 semantics:
 - **Scope**: `global` or `client` (operator-configured attribution budgets — **not** tenant isolation).
 - **Period**: `daily` (current UTC day) or `rolling_30d`.
 - **Action**: `block` or `warn`.
 - **Limit**: exact decimal USD, strictly greater than zero (`NUMERIC(20,6)`).
-- **Spend basis**: `estimatedCostUsd` (available immediately; actual cost lags reconciliation).
+- **Spend basis**: `estimatedCostUsd` (available immediately; `actualCostUsd` is never used for enforcement).
 - **Maximum spend window**: 30 days (aligned with full-fidelity telemetry retention).
-- Enforcement will be a **soft guardrail**: telemetry writes are batched/asynchronous, so spend reads are eventually consistent — there is no atomic spend reservation.
+
+Enforcement:
+- Budget evaluation runs **after the routing decision is built** (its `estimatedCostUsd` is the enforcement basis) and **before any provider invocation**.
+- When multiple budgets apply, **`block` takes precedence over `warn`**: any blocking budget blocks; otherwise any warning budget warns; otherwise allowed.
+- **`block`** → the request is rejected with **HTTP 429 `budget_exceeded`** (no provider call, no fallback, no completion telemetry). The error payload names the blocking budget id(s), projected spend, and limit.
+- **`warn`** → the request proceeds normally and a `budget` rationale entry is recorded on the telemetry decision for auditability.
+- `POST /v1/routing/preview` **simulates** the same evaluation and returns the hypothetical outcome in an additive `budget` field (`no_budget | allowed | warned | blocked`) — it never returns 429, never invokes a provider, and never writes telemetry or mutates budget state.
+- Enforcement is a **soft guardrail**: telemetry persistence is batched/asynchronous, so spend reads are eventually consistent — there is no atomic spend reservation.
 
 ## CLI
 

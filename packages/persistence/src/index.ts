@@ -13,7 +13,7 @@ export { createOperatorRuleStore } from "./overrides/store.js";
 export type { OperatorRuleStore } from "./overrides/store.js";
 export { createBudgetStore } from "./budgets/store.js";
 export type { BudgetStore } from "./budgets/store.js";
-export { sumEstimatedSpend } from "./budgets/spend.js";
+export { sumEstimatedSpend, spendForBudgets } from "./budgets/spend.js";
 export type { SpendQuery } from "./budgets/spend.js";
 export * from "./telemetry/index.js";
 export const PERSISTENCE_VERSION = "0.1.0";

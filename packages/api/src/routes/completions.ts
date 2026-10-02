@@ -17,6 +17,7 @@ import type { OperatorRuleStore, TelemetryWriter } from "@lca/persistence";
 
 import { loadCatalogSnapshot, type AppContext } from "../wiring.js";
 import { buildRoutingDecision, resolveGovernance } from "../routing/resolve-decision.js";
+import { evaluateRequestBudgets } from "../budgets/evaluate-request-budgets.js";
 import { LcaError } from "../plugins/errors.js";
 import { sharedStreamBus, type TelemetryStreamBus } from "../plugins/stream-bus.js";
 
@@ -103,6 +104,54 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
     });
 
     const decision = buildRoutingDecision({ request: normalized, resolution, snapshot });
+
+    // Budget guardrail: evaluated after the routing decision (whose estimated
+    // cost is the enforcement basis) and before any provider invocation. Soft
+    // guardrail — spend is read from asynchronously-persisted telemetry.
+    const budgetResult = await evaluateRequestBudgets({
+      db: deps.db,
+      budgetStore: deps.budgetStore,
+      clientId: normalized.clientId,
+      requestEstimatedCostUsd: decision.estimatedCostUsd,
+    });
+    if (budgetResult.decision === "blocked") {
+      req.log.warn(
+        {
+          budget: {
+            decision: budgetResult.decision,
+            blockedBudgetIds: budgetResult.blockedBudgetIds,
+            requestEstimatedCostUsd: budgetResult.requestEstimatedCostUsd,
+          },
+        },
+        "budget_exceeded",
+      );
+      throw new LcaError({
+        httpStatus: 429,
+        code: "budget_exceeded",
+        message: `request blocked by budget ${budgetResult.blockedBudgetIds.join(", ")}`,
+        details: {
+          blockedBudgetIds: budgetResult.blockedBudgetIds,
+          requestEstimatedCostUsd: budgetResult.requestEstimatedCostUsd,
+          budgets: budgetResult.evaluations
+            .filter((e) => e.decision === "block")
+            .map((e) => ({
+              budgetId: e.budgetId,
+              projectedSpendUsd: e.projectedSpendUsd,
+              limitUsd: e.limitUsd,
+            })),
+        },
+      });
+    }
+    if (budgetResult.decision === "warned") {
+      const warned = budgetResult.evaluations.filter((e) => e.decision === "warn");
+      decision.rationale.push({
+        factor: "budget",
+        verdict: "neutral",
+        note: `budget warn (soft guardrail): projected ${warned[0]?.projectedSpendUsd ?? "?"} USD reaches/exceeds limit for budget(s) ${warned
+          .map((e) => e.budgetId)
+          .join(", ")}`,
+      });
+    }
 
     const adapter = deps.registry.get(decision.chosenProviderId);
     if (!adapter) {

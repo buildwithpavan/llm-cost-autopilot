@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import Fastify, { type FastifyInstance } from "fastify";
 
-import type { Db, OperatorRuleStore, TelemetryWriter } from "@lca/persistence";
+import type { Db, OperatorRuleStore, BudgetStore, TelemetryWriter } from "@lca/persistence";
 import type { ProviderRegistry } from "@lca/providers";
 
 import type { LcaConfig } from "./config.js";
@@ -29,6 +29,7 @@ export interface ServerDeps {
   registry: ProviderRegistry;
   telemetryWriter: TelemetryWriter;
   ruleStore?: OperatorRuleStore;
+  budgetStore?: BudgetStore;
   metrics?: Metrics;
 }
 
@@ -93,11 +94,13 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     registry: deps.registry,
     telemetryWriter: deps.telemetryWriter,
     ...(deps.ruleStore ? { ruleStore: deps.ruleStore } : {}),
+    ...(deps.budgetStore ? { budgetStore: deps.budgetStore } : {}),
   });
   await app.register(previewRoute, {
     db: deps.db,
     registry: deps.registry,
     ...(deps.ruleStore ? { ruleStore: deps.ruleStore } : {}),
+    ...(deps.budgetStore ? { budgetStore: deps.budgetStore } : {}),
   });
   await app.register(catalogRoute, { db: deps.db, registry: deps.registry });
   await app.register(providerHealthRoute, { db: deps.db });

@@ -1,4 +1,5 @@
 import {
+  createBudgetStore,
   createDb,
   createHealthScheduler,
   createOperatorRuleStore,
@@ -56,13 +57,14 @@ async function main(): Promise<void> {
 
   const telemetryWriter = createTelemetryWriter(db, { batchSize: 100, flushEveryMs: 200 });
   const ruleStore = createOperatorRuleStore(db);
+  const budgetStore = createBudgetStore(db);
   const retentionJob = createRetentionJob(db);
   retentionJob.start();
   const stopReconciliationLoop = startReconciliationMetricLoop(db);
   const healthScheduler = createHealthScheduler(db, () => registry.list());
   healthScheduler.start();
 
-  const app = await buildServer({ config, db, registry, telemetryWriter, ruleStore });
+  const app = await buildServer({ config, db, registry, telemetryWriter, ruleStore, budgetStore });
   const closeSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
   for (const sig of closeSignals) {
     process.once(sig, async () => {

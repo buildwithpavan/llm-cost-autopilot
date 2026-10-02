@@ -10,6 +10,7 @@ import {
 
 import { loadCatalogSnapshot, type AppContext } from "../wiring.js";
 import { resolveRoutingDecision } from "../routing/resolve-decision.js";
+import { evaluateRequestBudgets } from "../budgets/evaluate-request-budgets.js";
 import { LcaError } from "../plugins/errors.js";
 
 const plugin: FastifyPluginAsync<AppContext> = async (fastify, deps) => {
@@ -52,7 +53,16 @@ const plugin: FastifyPluginAsync<AppContext> = async (fastify, deps) => {
       snapshot,
     });
 
-    return reply.status(200).send(decision);
+    // Simulate the same budget guardrail as /v1/completions (additive, read-only).
+    // A hypothetical block is reported in `budget`, never as a 429.
+    const budget = await evaluateRequestBudgets({
+      db: deps.db,
+      budgetStore: deps.budgetStore,
+      clientId,
+      requestEstimatedCostUsd: decision.estimatedCostUsd,
+    });
+
+    return reply.status(200).send({ ...decision, budget });
   });
 };
 
