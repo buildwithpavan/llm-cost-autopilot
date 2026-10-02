@@ -70,6 +70,12 @@ const HTTP_TO_CLI: ReadonlyArray<{ path: string; method: string; cliLeaf: string
   { path: "/v1/keys", method: "get", cliLeaf: "keys list" },
   { path: "/v1/keys", method: "post", cliLeaf: "keys create" },
   { path: "/v1/keys/{keyId}", method: "delete", cliLeaf: "keys revoke" },
+  { path: "/v1/budgets", method: "get", cliLeaf: "budgets list" },
+  { path: "/v1/budgets", method: "post", cliLeaf: "budgets create" },
+  { path: "/v1/budgets/status", method: "get", cliLeaf: "budgets status" },
+  { path: "/v1/budgets/{id}", method: "get", cliLeaf: "budgets get" },
+  { path: "/v1/budgets/{id}", method: "patch", cliLeaf: "budgets update" },
+  { path: "/v1/budgets/{id}", method: "delete", cliLeaf: "budgets delete" },
 ];
 
 describe("CLI ↔ HTTP contract parity (T096)", () => {

@@ -11,12 +11,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   createApiKey,
+  createBudgetStore,
   createDb,
   createOperatorRuleStore,
   createPool,
   createTelemetryWriter,
   runMigrations,
   setProviderHealth,
+  type BudgetStore,
   type Db,
   type OperatorRuleStore,
   type TelemetryWriter,
@@ -40,6 +42,7 @@ gated("CLI end-to-end integration (spawns the real lca binary)", () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let writer: TelemetryWriter;
   let ruleStore: OperatorRuleStore;
+  let budgetStore: BudgetStore;
   let adminSecret: string;
   let baseUrl: string;
   let tmp: string;
@@ -81,6 +84,7 @@ gated("CLI end-to-end integration (spawns the real lca binary)", () => {
     adminSecret = created.secret;
 
     ruleStore = createOperatorRuleStore(db);
+    budgetStore = createBudgetStore(db);
     writer = createTelemetryWriter(db, { batchSize: 1, flushEveryMs: 0 });
     app = await buildServer({
       config: loadConfig({ ...process.env, DATABASE_URL }),
@@ -88,6 +92,7 @@ gated("CLI end-to-end integration (spawns the real lca binary)", () => {
       registry,
       telemetryWriter: writer,
       ruleStore,
+      budgetStore,
     });
     await app.listen({ host: "127.0.0.1", port: 0 });
     const addr = app.server.address();
@@ -112,6 +117,8 @@ gated("CLI end-to-end integration (spawns the real lca binary)", () => {
   beforeEach(async () => {
     // Each test starts from a clean rule table so precedence is deterministic.
     await db.deleteFrom("operator_rules").execute();
+    await db.deleteFrom("spend_budgets").execute();
+    budgetStore.invalidate();
   });
 
   afterAll(async () => {
@@ -187,6 +194,50 @@ gated("CLI end-to-end integration (spawns the real lca binary)", () => {
     expect(pbody.decision.decisionSource).toBe("operator_rule");
     expect(pbody.decision.shadowedSource).toBe("client_override");
     expect(pbody.modelId).toBe("mock-cheap:small");
+  });
+
+  it("budgets create/list/get/update/status/delete lifecycle (decimal strings preserved)", async () => {
+    const createdGlobal = await cli([
+      "--json", "budgets", "create", "--scope", "global", "--period", "daily", "--limit-usd", "25.000000", "--action", "warn",
+    ]);
+    expect(createdGlobal.status).toBe(0);
+    const gid = (JSON.parse(createdGlobal.stdout) as { budgetId: string; limitUsd: string }).budgetId;
+    expect((JSON.parse(createdGlobal.stdout) as { limitUsd: string }).limitUsd).toBe("25.000000");
+
+    const createdClient = await cli([
+      "--json", "budgets", "create", "--scope", "client", "--client-id", "cli-e2e", "--period", "rolling_30d", "--limit-usd", "100", "--action", "block",
+    ]);
+    expect(createdClient.status).toBe(0);
+    expect((JSON.parse(createdClient.stdout) as { clientId: string }).clientId).toBe("cli-e2e");
+
+    const list = await cli(["--json", "budgets", "list"]);
+    expect((JSON.parse(list.stdout) as Array<{ budgetId: string }>).some((b) => b.budgetId === gid)).toBe(true);
+
+    const got = await cli(["--json", "budgets", "get", gid]);
+    expect((JSON.parse(got.stdout) as { budgetId: string }).budgetId).toBe(gid);
+
+    const updated = await cli(["--json", "budgets", "update", gid, "--limit-usd", "30.000000", "--disabled"]);
+    expect(updated.status).toBe(0);
+    const ub = JSON.parse(updated.stdout) as { limitUsd: string; enabled: boolean };
+    expect(ub.limitUsd).toBe("30.000000");
+    expect(ub.enabled).toBe(false);
+
+    const status = await cli(["--json", "budgets", "status"]);
+    expect(status.status).toBe(0);
+    const st = JSON.parse(status.stdout) as { budgets: Array<{ utilization: string }> };
+    expect(Array.isArray(st.budgets)).toBe(true);
+    for (const row of st.budgets) expect(row.utilization).toMatch(/^\d+\.\d{6}$/);
+
+    const del = await cli(["budgets", "delete", gid]);
+    expect(del.status).toBe(0);
+  });
+
+  it("budgets create surfaces server validation errors (exit 4)", async () => {
+    const res = await cli([
+      "--json", "budgets", "create", "--scope", "global", "--period", "daily", "--limit-usd", "0", "--action", "block",
+    ]);
+    expect(res.status).toBe(4);
+    expect(res.stderr).toContain("invalid_request");
   });
 
   it("invalid override target exits 4 with a structured error", async () => {

@@ -110,7 +110,7 @@ Correlation is via `x-request-id` (echoed on the response and used as `Telemetry
 
 ## Budget controls (in progress)
 
-Spend guardrails are under implementation. The backend domain model, persistent store (`spend_budgets`), and enforcement on the live completion/preview paths are in place; CRUD/status APIs, CLI, UI, and budget metrics follow in later phases.
+Spend guardrails are implemented through the API and CLI; the Cost Dashboard panel and budget metrics follow in a later phase. Budgets are persisted in `spend_budgets` and enforced on the live completion/preview paths.
 
 V1 semantics:
 - **Scope**: `global` or `client` (operator-configured attribution budgets — **not** tenant isolation).
@@ -120,6 +120,8 @@ V1 semantics:
 - **Spend basis**: `estimatedCostUsd` (available immediately; `actualCostUsd` is never used for enforcement).
 - **Maximum spend window**: 30 days (aligned with full-fidelity telemetry retention).
 
+Cost basis: **every executable routing decision carries the estimated cost of its selected effective provider/model** — autopilot, client overrides, operator rules, and explicit pins are all priced with the same estimator from the active pricing table. (Earlier builds attached `"0"` to override/pin decisions; that is fixed, so overrides no longer bypass budget accounting.) An override/pin whose target is absent from the priced catalog still fails deterministically with `422 override_target_missing` — it is never treated as zero-cost.
+
 Enforcement:
 - Budget evaluation runs **after the routing decision is built** (its `estimatedCostUsd` is the enforcement basis) and **before any provider invocation**.
 - When multiple budgets apply, **`block` takes precedence over `warn`**: any blocking budget blocks; otherwise any warning budget warns; otherwise allowed.
@@ -127,6 +129,16 @@ Enforcement:
 - **`warn`** → the request proceeds normally and a `budget` rationale entry is recorded on the telemetry decision for auditability.
 - `POST /v1/routing/preview` **simulates** the same evaluation and returns the hypothetical outcome in an additive `budget` field (`no_budget | allowed | warned | blocked`) — it never returns 429, never invokes a provider, and never writes telemetry or mutates budget state.
 - Enforcement is a **soft guardrail**: telemetry persistence is batched/asynchronous, so spend reads are eventually consistent — there is no atomic spend reservation.
+
+Management API (all Bearer-authenticated, operator-facing):
+
+| Route | Purpose |
+|---|---|
+| `GET \| POST /v1/budgets` | List / create budgets (`scope`, `clientId`, `period`, `limitUsd`, `action`, `enabled`; validated by the core schema) |
+| `GET \| PATCH \| DELETE /v1/budgets/{id}` | Get / update (invariants revalidated) / delete a budget |
+| `GET /v1/budgets/status` | Current spend/utilization for the authenticated client's applicable budgets (global + that client's). Per budget: `limitUsd`, `currentSpendUsd`, `remainingUsd`, `utilization` (spend/limit as a 6-decimal ratio string), `status` (`below_limit \| at_limit \| over_limit`). **Reports persisted spend only — it does NOT include the current request's estimated cost** (that is enforcement, not status). Read-only; decimal-exact. |
+
+CLI mirror: `lca budgets list \| get <id> \| create \| update <id> \| delete <id> \| status`. Monetary values are decimal strings end to end (never floated).
 
 ## CLI
 
@@ -141,6 +153,7 @@ lca telemetry query [--client-id …] [--provider-id …] [--since RFC3339] [--l
 lca telemetry rollups [--from YYYY-MM-DD] [--to YYYY-MM-DD]
 lca telemetry replay <eventId>              # exits ≠ 0 on divergence
 lca rules list | add --file r.json | update <id> --file r.json | delete <id>
+lca budgets list | get <id> | create --scope … --period … --limit-usd … --action … | update <id> … | delete <id> | status
 lca keys list | create --client-id ID --label LABEL | revoke <keyId>
 ```
 

@@ -13,3 +13,5 @@ export type {
 } from "./aggregate.js";
 export { budgetWindow } from "./window.js";
 export type { BudgetWindow } from "./window.js";
+export { budgetStatus } from "./status.js";
+export type { BudgetStatus, BudgetStatusLevel } from "./status.js";

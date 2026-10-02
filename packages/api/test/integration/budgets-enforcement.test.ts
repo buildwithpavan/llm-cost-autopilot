@@ -107,6 +107,8 @@ gated("budget enforcement (completion + preview)", () => {
   beforeEach(async () => {
     await db.deleteFrom("spend_budgets").execute();
     budgetStore.invalidate();
+    await db.deleteFrom("operator_rules").execute();
+    ruleStore.invalidate();
     await db.deleteFrom("telemetry_events").where("client_id", "=", CLIENT).execute();
   });
 
@@ -270,5 +272,54 @@ gated("budget enforcement (completion + preview)", () => {
     expect(prev.body.budget.decision).toBe("blocked");
     expect(comp.status).toBe(429); // completion enforces what preview simulated
     expect(comp.body.error.code).toBe("budget_exceeded");
+  });
+
+  // ---- corrected cost basis: override/pin/operator-rule enforcement ----
+
+  const overrideMsg = { messages: [{ role: "user", content: "hi" }], override: { providerId: "mock-fast", modelId: null } };
+  const pinMsg = { messages: [{ role: "user", content: "hi" }], override: { providerId: "mock-fast", modelId: "mock-fast:default" } };
+
+  it("prices a client override and blocks on request cost alone (no prior spend)", async () => {
+    const cost = (await preview(overrideMsg)).body.estimatedCostUsd as string;
+    expect(Number(cost)).toBeGreaterThan(0); // corrected: not "0"
+    await budgetStore.create({ scope: "client", clientId: CLIENT, period: "daily", limitUsd: cost, action: "block" });
+    const res = await complete(overrideMsg);
+    expect(res.status).toBe(429);
+    expect(res.body.error.code).toBe("budget_exceeded");
+  });
+
+  it("allows an override when the budget has sufficient headroom", async () => {
+    await budgetStore.create({ scope: "client", clientId: CLIENT, period: "daily", limitUsd: "1000", action: "block" });
+    expect((await complete(overrideMsg)).status).toBe(200);
+  });
+
+  it("blocks an explicit provider/model pin that exceeds budget on request cost", async () => {
+    const cost = (await preview(pinMsg)).body.estimatedCostUsd as string;
+    await budgetStore.create({ scope: "client", clientId: CLIENT, period: "daily", limitUsd: cost, action: "block" });
+    expect((await complete(pinMsg)).status).toBe(429);
+  });
+
+  it("blocks an operator-rule target that exceeds budget on request cost", async () => {
+    await ruleStore.create({
+      priority: 10,
+      enabled: true,
+      match: { clientIds: null, requiredCapabilities: null, minEstimatedTokens: null, maxEstimatedTokens: null },
+      pin: { providerId: "mock-fast", modelId: null },
+    });
+    const prev = await preview(msg);
+    expect(prev.body.decisionSource).toBe("operator_rule");
+    const cost = prev.body.estimatedCostUsd as string;
+    await budgetStore.create({ scope: "client", clientId: CLIENT, period: "daily", limitUsd: cost, action: "block" });
+    const res = await complete(msg);
+    expect(res.status).toBe(429);
+    expect(res.body.error.code).toBe("budget_exceeded");
+  });
+
+  it("warns (and proceeds) for an override at the limit, recording a rationale", async () => {
+    const cost = (await preview(overrideMsg)).body.estimatedCostUsd as string;
+    await budgetStore.create({ scope: "client", clientId: CLIENT, period: "daily", limitUsd: cost, action: "warn" });
+    const res = await complete(overrideMsg);
+    expect(res.status).toBe(200);
+    expect(res.body.decision.rationale.some((r: { factor: string }) => r.factor === "budget")).toBe(true);
   });
 });

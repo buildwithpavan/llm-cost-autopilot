@@ -40,6 +40,12 @@ Exit codes:
 | `lca rules add --file <path>` | `POST /v1/operator/rules` | Rule payload as JSON in file (or `-` for stdin). |
 | `lca rules update <rule-id> --file <path>` | `PATCH /v1/operator/rules/{ruleId}` | |
 | `lca rules delete <rule-id>` | `DELETE /v1/operator/rules/{ruleId}` | |
+| `lca budgets list` | `GET /v1/budgets` | |
+| `lca budgets create --scope <global\|client> [--client-id ID] --period <daily\|rolling_30d> --limit-usd <decimal> --action <block\|warn> [--disabled]` | `POST /v1/budgets` | Monetary values are decimal strings (never floated). |
+| `lca budgets get <id>` | `GET /v1/budgets/{id}` | |
+| `lca budgets update <id> [--scope …] [--client-id …] [--period …] [--limit-usd …] [--action …] [--enabled\|--disabled]` | `PATCH /v1/budgets/{id}` | Invariants revalidated server-side. |
+| `lca budgets delete <id>` | `DELETE /v1/budgets/{id}` | |
+| `lca budgets status` | `GET /v1/budgets/status` | Current spend/utilization for applicable budgets; read-only; does not include the current request. |
 | `lca keys list` | `GET /v1/keys` | |
 | `lca keys create --client-id ID --label LABEL` | `POST /v1/keys` | Prints the freshly generated `secret` exactly once to stdout (or JSON with `--json`). Secret never re-appears. |
 | `lca keys revoke <key-id>` | `DELETE /v1/keys/{keyId}` | |

@@ -1,4 +1,5 @@
 import {
+  cost,
   overrides as coreOverrides,
   routing,
   type NormalizedRequest,
@@ -90,6 +91,17 @@ export function buildRoutingDecision(input: BuildRoutingDecisionInput): RoutingD
             : "autonomous scoring bypassed by client_override",
       },
     ];
+    // Price the pinned target with the same estimator autopilot uses, so budget
+    // enforcement sees a real cost for override/operator-rule/pin decisions.
+    // The target comes from the priced catalog snapshot, so it is always priceable.
+    const outputTokens = Math.max(4, Math.floor(request.estimatedInputTokens / 4));
+    const estimatedCostUsd = cost.estimateCostUsd({
+      table: snapshot.pricingTable,
+      providerId: target.providerId,
+      modelId: target.modelId,
+      inputTokens: request.estimatedInputTokens,
+      outputTokens,
+    });
     return {
       decisionSource: resolution.effectiveSource,
       shadowedSource: resolution.shadowedSource,
@@ -106,7 +118,7 @@ export function buildRoutingDecision(input: BuildRoutingDecisionInput): RoutingD
       chosenModelId: target.modelId,
       rationale,
       pricingTableVersionId: snapshot.pricingTable.versionId,
-      estimatedCostUsd: "0",
+      estimatedCostUsd,
     };
   }
 

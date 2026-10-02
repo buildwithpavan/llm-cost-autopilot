@@ -20,6 +20,7 @@ import telemetryRollupsRoute from "./routes/telemetry-rollups.js";
 import telemetryReplayRoute from "./routes/telemetry-replay.js";
 import telemetryStreamRoute from "./routes/telemetry-stream.js";
 import rulesRoute from "./routes/rules.js";
+import budgetsRoute from "./routes/budgets.js";
 import keysRoute from "./routes/keys.js";
 import devMockRoute from "./routes/dev-mock.js";
 
@@ -111,6 +112,9 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   await app.register(telemetryStreamRoute, { db: deps.db, registry: deps.registry });
   if (deps.ruleStore) {
     await app.register(rulesRoute, { ruleStore: deps.ruleStore });
+  }
+  if (deps.budgetStore) {
+    await app.register(budgetsRoute, { db: deps.db, budgetStore: deps.budgetStore });
   }
   await app.register(keysRoute, { db: deps.db });
 

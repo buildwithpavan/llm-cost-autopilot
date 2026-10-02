@@ -310,6 +310,89 @@ paths:
       responses:
         "204": { description: Revoked. }
 
+  /v1/budgets:
+    get:
+      summary: List configured spend budgets
+      responses:
+        "200":
+          description: All budgets (deterministic order).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Budget" }
+    post:
+      summary: Create a spend budget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BudgetInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Budget" }
+        "400": { description: Invalid budget (scope/client, limit, period, action). }
+
+  /v1/budgets/status:
+    get:
+      summary: Current spend/utilization for applicable budgets (read-only)
+      description: |
+        Returns status for the authenticated client's applicable budgets (global +
+        that client's). Based on persisted spend only — it does NOT include the
+        current request's estimated cost. Soft guardrail; spend is eventually
+        consistent because telemetry is persisted asynchronously.
+      responses:
+        "200":
+          description: Applicable budget status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [budgets]
+                properties:
+                  budgets:
+                    type: array
+                    items: { $ref: "#/components/schemas/BudgetStatus" }
+
+  /v1/budgets/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get one budget
+      responses:
+        "200":
+          description: The budget.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Budget" }
+        "404": { description: No budget with that id. }
+    patch:
+      summary: Update mutable budget fields (invariants revalidated)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BudgetInput" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Budget" }
+        "400": { description: Invalid patch. }
+        "404": { description: No budget with that id. }
+    delete:
+      summary: Delete a budget
+      responses:
+        "204": { description: Deleted. }
+        "404": { description: No budget with that id. }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -573,3 +656,43 @@ components:
         createdAt: { type: string, format: date-time }
         revokedAt: { type: string, format: date-time, nullable: true }
         lastUsedAt: { type: string, format: date-time, nullable: true }
+
+    BudgetInput:
+      type: object
+      required: [scope, period, limitUsd, action]
+      properties:
+        scope: { type: string, enum: [global, client] }
+        clientId:
+          type: string
+          nullable: true
+          description: Required (non-empty) when scope=client; MUST be null when scope=global.
+        period: { type: string, enum: [daily, rolling_30d] }
+        limitUsd: { type: string, description: "Decimal USD string, strictly > 0." }
+        action: { type: string, enum: [block, warn] }
+        enabled: { type: boolean, default: true }
+
+    Budget:
+      allOf:
+        - $ref: "#/components/schemas/BudgetInput"
+        - type: object
+          required: [budgetId, createdAt, updatedAt]
+          properties:
+            budgetId: { type: string }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+
+    BudgetStatus:
+      type: object
+      required:
+        [budgetId, scope, period, action, limitUsd, currentSpendUsd, remainingUsd, utilization, status]
+      properties:
+        budgetId: { type: string }
+        scope: { type: string, enum: [global, client] }
+        clientId: { type: string, nullable: true }
+        period: { type: string, enum: [daily, rolling_30d] }
+        action: { type: string, enum: [block, warn] }
+        limitUsd: { type: string, description: "Decimal USD string." }
+        currentSpendUsd: { type: string, description: "Persisted spend in window (decimal)." }
+        remainingUsd: { type: string, description: "limit − spend (decimal; may be negative)." }
+        utilization: { type: string, description: "spend / limit as a 6-decimal ratio string." }
+        status: { type: string, enum: [below_limit, at_limit, over_limit] }

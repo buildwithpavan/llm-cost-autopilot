@@ -4,6 +4,7 @@ import { Command } from "commander";
 
 import { registerKeyCommands } from "./commands/keys.js";
 import { registerRuleCommands } from "./commands/rules.js";
+import { registerBudgetCommands } from "./commands/budgets.js";
 import { registerTelemetryCommands } from "./commands/telemetry.js";
 
 interface GlobalOpts {
@@ -163,6 +164,7 @@ export function buildProgram(): Command {
 
   registerTelemetryCommands(program);
   registerRuleCommands(program);
+  registerBudgetCommands(program);
   registerKeyCommands(program);
 
   return program;

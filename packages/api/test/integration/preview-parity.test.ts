@@ -97,7 +97,9 @@ gated("Routing preview parity with completions", () => {
     expect(res.body.decisionSource).toBe("operator_rule");
     expect(res.body.chosenProviderId).toBe("mock-fast");
     expect(res.body.shadowedSource).toBeNull();
-    expect(res.body.estimatedCostUsd).toBe("0");
+    // Pinned decisions are now priced with the same estimator as autopilot.
+    expect(res.body.estimatedCostUsd).toMatch(/^\d+(\.\d+)?$/);
+    expect(Number(res.body.estimatedCostUsd)).toBeGreaterThan(0);
   });
 
   it("returns client_override when only a client override is present", async () => {
@@ -109,7 +111,8 @@ gated("Routing preview parity with completions", () => {
     expect(res.body.decisionSource).toBe("client_override");
     expect(res.body.chosenProviderId).toBe("mock-fast");
     expect(res.body.shadowedSource).toBeNull();
-    expect(res.body.estimatedCostUsd).toBe("0");
+    expect(res.body.estimatedCostUsd).toMatch(/^\d+(\.\d+)?$/);
+    expect(Number(res.body.estimatedCostUsd)).toBeGreaterThan(0);
   });
 
   it("resolves an explicit provider/model pin to that exact target", async () => {
