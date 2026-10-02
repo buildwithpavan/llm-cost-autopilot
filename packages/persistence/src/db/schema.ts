@@ -90,6 +90,19 @@ export interface ProviderHealthStateRow {
   updated_at: Generated<Date>;
 }
 
+export interface SpendBudgetsRow {
+  budget_id: string;
+  scope: "global" | "client";
+  client_id: string | null;
+  period: "daily" | "rolling_30d";
+  // NUMERIC → string (see pgTypes parser above) to preserve decimal precision.
+  limit_usd: string;
+  action: "block" | "warn";
+  enabled: Generated<boolean>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
 export interface Database {
   pricing_tables: PricingTablesRow;
   pricing_entries: PricingEntriesRow;
@@ -98,6 +111,7 @@ export interface Database {
   operator_rules: OperatorRulesRow;
   api_keys: ApiKeysRow;
   provider_health_state: ProviderHealthStateRow;
+  spend_budgets: SpendBudgetsRow;
 }
 
 export function createPool(databaseUrl: string): pg.Pool {

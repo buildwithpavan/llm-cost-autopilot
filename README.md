@@ -108,6 +108,19 @@ All non-`/v1/health` routes require `Authorization: Bearer <api_key>`. The canon
 
 Correlation is via `x-request-id` (echoed on the response and used as `TelemetryEvent.eventId`).
 
+## Budget controls (in progress)
+
+Spend guardrails are under implementation. Phase 1 (this iteration) ships the backend foundation only — a budget domain model, deterministic evaluation, and a persistent budget store (`spend_budgets`); enforcement, API routes, CLI, and UI follow in later phases.
+
+V1 semantics:
+- **Scope**: `global` or `client` (operator-configured attribution budgets — **not** tenant isolation).
+- **Period**: `daily` (current UTC day) or `rolling_30d`.
+- **Action**: `block` or `warn`.
+- **Limit**: exact decimal USD, strictly greater than zero (`NUMERIC(20,6)`).
+- **Spend basis**: `estimatedCostUsd` (available immediately; actual cost lags reconciliation).
+- **Maximum spend window**: 30 days (aligned with full-fidelity telemetry retention).
+- Enforcement will be a **soft guardrail**: telemetry writes are batched/asynchronous, so spend reads are eventually consistent — there is no atomic spend reservation.
+
 ## CLI
 
 Every HTTP capability has a mirror in `lca`. See [specs/001-llm-routing-mvp/contracts/cli.md](specs/001-llm-routing-mvp/contracts/cli.md) and the parity test at [packages/api/test/contract/parity.test.ts](packages/api/test/contract/parity.test.ts).
