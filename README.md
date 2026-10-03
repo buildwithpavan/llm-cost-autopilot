@@ -96,6 +96,7 @@ All non-`/v1/health` routes require `Authorization: Bearer <api_key>`. The canon
 | `GET /metrics` (public) | Prometheus scrape endpoint |
 | `POST /v1/completions` | Route + execute an LLM chat/completion request |
 | `POST /v1/routing/preview` | Dry-run routing using the same precedence as `/v1/completions` (`operator_rule` > `client_override` > `autopilot`); read-only — never invokes a provider and writes no telemetry |
+| `POST /v1/routing/simulate` | Governance dry-run / counterfactual. Body `{ request, proposedRule }` (same `completionRequestSchema` + `operatorRuleInputSchema` shapes). Resolves the **current** live decision and the **proposed** decision (the unsaved rule treated as an enabled operator rule) via the exact same precedence/matcher/cost/budget path as preview. Returns `{ current, proposed, comparison, proposal }` with exact decimal costs and a `comparison.estimatedCostDeltaUsd`. Side-effect free: no rule persistence, no provider call, no telemetry, no budget write/reserve, no circuit/health change. Budget is **evaluated** (`no_budget\|allowed\|warned\|blocked`) but never enforced. |
 | `GET /v1/catalog` | List the current provider/model catalog |
 | `GET /v1/telemetry/events` | Query full-fidelity telemetry (cursor pagination) |
 | `GET /v1/telemetry/summary` | Bounded recent aggregate over `telemetry_events` (Bearer). Filters: `since`, `until`, `clientId`, `providerId`, `modelId`. Returns `totals`, `byProvider[]`, `byModel[]` (`requestCount`, `inputTokens`, `outputTokens`, `estimatedCostUsd`, `actualCostUsd`, `pendingActualCostCount`). Costs are decimal strings; `actualCostUsd` sums only non-null actuals and pending rows are counted in `pendingActualCostCount` (never as `$0`). Window defaults to the last 30 days (`until`=now); the maximum supported window is 30 days (aligned with full-fidelity retention) — larger ranges return `400 invalid_request`. Aggregates recent telemetry only; never returns raw events. |
@@ -131,6 +132,7 @@ Enforcement:
 - **`block`** → the request is rejected with **HTTP 429 `budget_exceeded`** (no provider call, no fallback, no completion telemetry). The error payload names the blocking budget id(s), projected spend, and limit.
 - **`warn`** → the request proceeds normally and a `budget` rationale entry is recorded on the telemetry decision for auditability.
 - `POST /v1/routing/preview` **simulates** the same evaluation and returns the hypothetical outcome in an additive `budget` field (`no_budget | allowed | warned | blocked`) — it never returns 429, never invokes a provider, and never writes telemetry or mutates budget state.
+- `POST /v1/routing/simulate` (governance dry-run) evaluates budgets for **both** the current and proposed decisions read-only — budgets are evaluated but never reserved, no `budget_decisions` row is written, and no `budget.evaluated` event is emitted.
 - Enforcement is a **soft guardrail**: telemetry persistence is batched/asynchronous, so spend reads are eventually consistent — there is no atomic spend reservation.
 
 Management API (all Bearer-authenticated, operator-facing):

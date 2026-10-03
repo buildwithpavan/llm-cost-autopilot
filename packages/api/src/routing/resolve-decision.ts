@@ -29,7 +29,7 @@ export interface BuildRoutingDecisionInput {
 }
 
 /** Verify that the target of an override or operator pin exists in the current catalog. */
-function validatePinAgainstCatalog(
+export function validatePinAgainstCatalog(
   pin: { providerId?: string | null; modelId?: string | null },
   snapshot: CatalogSnapshot,
 ): { providerId: string; modelId: string } {

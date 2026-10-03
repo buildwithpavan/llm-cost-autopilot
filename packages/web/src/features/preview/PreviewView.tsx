@@ -10,6 +10,7 @@ import { formatUsd } from "../../lib/format.js";
 import { decisionSourceMeta, type Semantic } from "../routing-explorer/event-presenters.js";
 import type { CandidateScore, RationaleEntry, RoutingDecision } from "../../types/index.js";
 import { usePreview } from "./usePreview.js";
+import { SimulationSection } from "./SimulationSection.js";
 import {
   CAPABILITIES,
   QUALITY_TIERS,
@@ -180,6 +181,8 @@ export function PreviewView() {
         ) : state.status === "ready" ? (
           <PreviewResult decision={state.decision} />
         ) : null}
+
+        <SimulationSection />
       </div>
     </AppShell>
   );

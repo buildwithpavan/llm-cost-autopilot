@@ -19,6 +19,7 @@ import healthRoute from "./routes/health.js";
 import providerHealthRoute from "./routes/provider-health.js";
 import completionsRoute from "./routes/completions.js";
 import previewRoute from "./routes/preview.js";
+import routingSimulateRoute from "./routes/routing-simulate.js";
 import catalogRoute from "./routes/catalog.js";
 import telemetryEventsRoute from "./routes/telemetry-events.js";
 import telemetrySummaryRoute from "./routes/telemetry-summary.js";
@@ -123,6 +124,12 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     ...(deps.budgetStore ? { budgetStore: deps.budgetStore } : {}),
   });
   await app.register(previewRoute, {
+    db: deps.db,
+    registry: deps.registry,
+    ...(deps.ruleStore ? { ruleStore: deps.ruleStore } : {}),
+    ...(deps.budgetStore ? { budgetStore: deps.budgetStore } : {}),
+  });
+  await app.register(routingSimulateRoute, {
     db: deps.db,
     registry: deps.registry,
     ...(deps.ruleStore ? { ruleStore: deps.ruleStore } : {}),

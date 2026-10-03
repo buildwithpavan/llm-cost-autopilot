@@ -206,6 +206,8 @@ Example: pin all requests from client `acme-prod` that require `tool_use` to `op
 }
 ```
 
+**Governance dry-run (`POST /v1/routing/simulate`).** To preview a rule's impact before saving it, submit `{ request, proposedRule }` (same shapes as `POST /v1/completions` and a rule-create body). The simulation resolves the **current** live decision and the **proposed** decision — the unsaved rule treated as an enabled operator rule — through the exact same precedence, matcher, catalog, cost estimator, and read-only budget evaluation as live routing. The response (`{ current, proposed, comparison, proposal }`) shows the provider/model/governance source/estimated cost for each, the exact `estimatedCostDeltaUsd`, whether the rule `matchesRequest`/is `effective`/was `shadowedByRuleId`, and whether the budget outcome changed. It is **side-effect free**: the proposed rule is never persisted, the live rule snapshot is never mutated, no provider executes, no telemetry or budget-decision audit is written, no spend is reserved, and no circuit/health state changes. Budgets are *evaluated* but never *enforced* (no 429). Saving a rule still requires the explicit `POST /v1/operator/rules` flow.
+
 ## API keys
 
 Keys are minted via `POST /v1/keys` (or `lca keys create`). The plaintext secret is returned **exactly once**; subsequent list/get calls never include it. Storage: Argon2id hash + `client_id` + `label` + created/revoked timestamps.

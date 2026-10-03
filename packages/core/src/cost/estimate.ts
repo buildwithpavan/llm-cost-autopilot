@@ -24,6 +24,11 @@ export function formatUsd(value: DecimalInstance): string {
   return roundToUsd6(value).toFixed(6).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }
 
+/** Exact `a − b` in USD, 6-dp rounded (no floating point). Used for cost deltas. */
+export function subtractUsd(a: string, b: string): string {
+  return formatUsd(new Decimal(a).minus(b));
+}
+
 export function estimateCostUsd(input: EstimateCostInput): string {
   const entry = input.table.entries.find(
     (e) => e.providerId === input.providerId && e.modelId === input.modelId,
