@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const envSchema = z.object({
+const baseEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(8080),
   DATABASE_URL: z.string().url(),
@@ -21,7 +21,20 @@ const envSchema = z.object({
   LCA_CIRCUIT_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
   LCA_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().positive().max(100).default(5),
   LCA_CIRCUIT_COOLDOWN_MS: z.coerce.number().int().positive().max(3_600_000).default(30_000),
+  // Cost anomaly detection (Phase 12). Deterministic, estimated-cost basis.
+  LCA_ANOMALY_MIN_HISTORY: z.coerce.number().int().positive().max(1000).default(6),
+  LCA_ANOMALY_REL_THRESHOLD: z.coerce.number().positive().max(100).default(0.5),
+  LCA_ANOMALY_CRIT_REL_THRESHOLD: z.coerce.number().positive().max(1000).default(1),
+  LCA_ANOMALY_MIN_ABS_USD: z.string().regex(/^\d+(\.\d+)?$/).default("0.010000"),
 });
+
+const envSchema = baseEnvSchema.refine(
+  (c) => c.LCA_ANOMALY_CRIT_REL_THRESHOLD >= c.LCA_ANOMALY_REL_THRESHOLD,
+  {
+    message: "LCA_ANOMALY_CRIT_REL_THRESHOLD must be >= LCA_ANOMALY_REL_THRESHOLD",
+    path: ["LCA_ANOMALY_CRIT_REL_THRESHOLD"],
+  },
+);
 
 export type LcaConfig = z.infer<typeof envSchema>;
 

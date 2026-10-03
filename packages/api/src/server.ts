@@ -23,6 +23,7 @@ import catalogRoute from "./routes/catalog.js";
 import telemetryEventsRoute from "./routes/telemetry-events.js";
 import telemetrySummaryRoute from "./routes/telemetry-summary.js";
 import telemetryTimeseriesRoute from "./routes/telemetry-timeseries.js";
+import telemetryAnomaliesRoute from "./routes/telemetry-anomalies.js";
 import telemetryRollupsRoute from "./routes/telemetry-rollups.js";
 import telemetryReplayRoute from "./routes/telemetry-replay.js";
 import telemetryBudgetDecisionsRoute from "./routes/telemetry-budget-decisions.js";
@@ -132,6 +133,16 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   await app.register(telemetryEventsRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetrySummaryRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryTimeseriesRoute, { db: deps.db, registry: deps.registry });
+  await app.register(telemetryAnomaliesRoute, {
+    db: deps.db,
+    registry: deps.registry,
+    anomalyConfig: {
+      minHistory: deps.config.LCA_ANOMALY_MIN_HISTORY,
+      relThreshold: String(deps.config.LCA_ANOMALY_REL_THRESHOLD),
+      criticalRelThreshold: String(deps.config.LCA_ANOMALY_CRIT_REL_THRESHOLD),
+      minAbsoluteUsd: deps.config.LCA_ANOMALY_MIN_ABS_USD,
+    },
+  });
   await app.register(telemetryRollupsRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryReplayRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryBudgetDecisionsRoute, { db: deps.db, registry: deps.registry });

@@ -802,4 +802,34 @@
   }
 }
 
+/* Cost anomalies ---------------------------------------------------------- */
+.sevBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-chip);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.sevWarning {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+
+.sevCritical {
+  color: var(--error);
+  border-color: var(--error);
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+}
+
+.devPct {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
 

@@ -7,17 +7,18 @@ Concrete playbooks for running the backend in dev, staging, and production. This
 1. [Environment configuration](#environment-configuration)
 2. [Provider reliability (timeout + retry)](#provider-reliability-timeout--retry)
 3. [Provider circuit breaker](#provider-circuit-breaker)
-4. [Deployment shape](#deployment-shape)
-5. [Database migrations](#database-migrations)
-6. [Pricing snapshots](#pricing-snapshots)
-7. [Provider registration and health](#provider-registration-and-health)
-8. [Operator rules](#operator-rules)
-9. [API keys](#api-keys)
-10. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
-11. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
-12. [Observability endpoints](#observability-endpoints)
-13. [Backup and restore](#backup-and-restore)
-14. [Incident playbooks](#incident-playbooks)
+4. [Cost anomaly detection](#cost-anomaly-detection)
+5. [Deployment shape](#deployment-shape)
+6. [Database migrations](#database-migrations)
+7. [Pricing snapshots](#pricing-snapshots)
+8. [Provider registration and health](#provider-registration-and-health)
+9. [Operator rules](#operator-rules)
+10. [API keys](#api-keys)
+11. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
+12. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
+13. [Observability endpoints](#observability-endpoints)
+14. [Backup and restore](#backup-and-restore)
+15. [Incident playbooks](#incident-playbooks)
 
 ---
 
@@ -44,6 +45,10 @@ Configuration is loaded by [packages/api/src/config.ts](../packages/api/src/conf
 | `LCA_CIRCUIT_ENABLED` | no (`true`) | Enable the process-local provider circuit breaker. `true`/`false`. |
 | `LCA_CIRCUIT_FAILURE_THRESHOLD` | no (`5`) | Consecutive provider **availability** failures (per provider) that OPEN the circuit. Positive integer (≤ 100). |
 | `LCA_CIRCUIT_COOLDOWN_MS` | no (`30000`) | Time a circuit stays OPEN before allowing a single HALF_OPEN probe, in milliseconds. Positive integer (≤ 3600000). |
+| `LCA_ANOMALY_MIN_HISTORY` | no (`6`) | Minimum active preceding buckets required before a bucket is evaluated for a cost anomaly. Positive integer (≤ 1000). |
+| `LCA_ANOMALY_REL_THRESHOLD` | no (`0.5`) | Warning trigger: estimated cost must exceed the baseline by this fraction (e.g. `0.5` = +50%). Positive number. |
+| `LCA_ANOMALY_CRIT_REL_THRESHOLD` | no (`1`) | Critical trigger: deviation above the baseline (e.g. `1` = +100%). Positive number; must be `≥ LCA_ANOMALY_REL_THRESHOLD`. |
+| `LCA_ANOMALY_MIN_ABS_USD` | no (`0.010000`) | Absolute floor: a bucket's estimated cost must be at least this (decimal USD) to be flagged, suppressing tiny spikes. |
 
 Provider credentials are read at process start only. Rotating them requires a restart.
 
@@ -96,6 +101,28 @@ It is intentionally separate from the persisted provider-health probe scheduler 
 - `lca_circuit_blocked_total` (counter) — executions skipped due to an OPEN circuit.
 
 A request skipped because a provider circuit is OPEN remains exactly one logical request (`lca_requests_total`, `lca_request_duration_seconds`, and `lca_routing_overhead_ms` semantics are unchanged).
+
+
+## Cost anomaly detection
+
+`GET /v1/telemetry/anomalies` ([packages/persistence/src/telemetry/anomalies.ts](../packages/persistence/src/telemetry/anomalies.ts)) flags buckets whose cost is unusually high relative to their own recent history. It is **deterministic and fully explainable** — there is no ML, forecasting, scoring model, background worker, or new storage. The whole calculation runs as one bounded SQL query over raw `telemetry_events` using exact PostgreSQL `NUMERIC` arithmetic (no floating point).
+
+**Algorithm (per completed bucket, oldest→newest):**
+
+1. Build the contiguous, zero-filled bucket series for the filtered population (same `since`/`until`/`bucket`/`clientId`/`providerId`/`modelId` rules and 30-day maximum window as `/v1/telemetry/timeseries`). The internal lower bound is extended before `since` by the baseline lookback so early targets have context; the public response stays within `[since, until)`.
+2. **Baseline** = mean **estimated** cost of the *active* buckets (those with requests) among the immediately preceding lookback window — **24 buckets for `hour`, 14 for `day`** — excluding the target bucket itself.
+3. A bucket is flagged only when **all** hold:
+   - at least `LCA_ANOMALY_MIN_HISTORY` active preceding buckets exist (otherwise it is not evaluated — no fabricated baseline);
+   - baseline > 0;
+   - estimated cost ≥ `LCA_ANOMALY_MIN_ABS_USD` (absolute floor — suppresses tiny spikes);
+   - `estimated − baseline ≥ baseline × LCA_ANOMALY_REL_THRESHOLD` (relative deviation).
+4. **Severity** is `critical` when `estimated − baseline ≥ baseline × LCA_ANOMALY_CRIT_REL_THRESHOLD`, otherwise `warning`.
+
+**Boundaries.** The bucket containing "now" is **incomplete** and is never evaluated (it is naturally partial). The target bucket is never part of its own baseline. Results are ordered by bucket time and are **not** ranked against each other.
+
+**Basis & limitations.** The signal is **estimated** cost (available immediately and consistently); actual/reconciled cost is not used and reconciliation gaps never create anomalies. Filters apply to both the target and its baseline (filtered current is never compared to unfiltered history). Buckets with a zero-cost baseline are not evaluated. V1 detects upward cost deviations only. The endpoint does **not** deliver alerts, send notifications, or take any automatic remediation/budget/routing action — it is read-only reporting.
+
+Each returned anomaly is explainable from its fields alone: *"estimated cost was `estimatedCostUsd`, the baseline was `baselineEstimatedCostUsd`, a difference of `deviationUsd` (`deviationPercent`%) across `historicalBucketCount` historical buckets → `severity`."*
 
 
 ## Deployment shape

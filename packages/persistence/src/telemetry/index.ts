@@ -22,5 +22,7 @@ export type {
 } from "./summary.js";
 export { aggregateTelemetryTimeseries } from "./timeseries.js";
 export type { TimeseriesBucket, TimeseriesFilters, TimeseriesPoint } from "./timeseries.js";
+export { detectCostAnomalies } from "./anomalies.js";
+export type { AnomalyConfig, AnomalyFilters, AnomalySeverity, CostAnomaly } from "./anomalies.js";
 export { createTelemetryWriter, writeTelemetryImmediate } from "./write.js";
 export type { TelemetryWriter, TelemetryWriterOptions } from "./write.js";

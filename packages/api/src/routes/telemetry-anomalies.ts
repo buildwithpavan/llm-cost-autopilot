@@ -1,0 +1,99 @@
+import type { FastifyPluginAsync } from "fastify";
+
+import {
+  detectCostAnomalies,
+  type AnomalyConfig,
+  type AnomalyFilters,
+  type TimeseriesBucket,
+} from "@lca/persistence";
+
+import type { AppContext } from "../wiring.js";
+import { LcaError } from "../plugins/errors.js";
+
+/** Same bounds as /v1/telemetry/timeseries: raw-only, 30-day retention window. */
+const MAX_WINDOW_DAYS: Record<TimeseriesBucket, number> = { hour: 30, day: 30 };
+const DAY_MS = 86_400_000;
+const DEFAULT_WINDOW_MS: Record<TimeseriesBucket, number> = { hour: 1 * DAY_MS, day: 30 * DAY_MS };
+
+export interface AnomaliesDeps extends AppContext {
+  anomalyConfig: AnomalyConfig;
+}
+
+function parseDate(value: string, field: string): Date {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) {
+    throw new LcaError({
+      httpStatus: 400,
+      code: "invalid_request",
+      message: `invalid ${field}: expected an ISO-8601 timestamp`,
+    });
+  }
+  return d;
+}
+
+function parseBucket(value: string | undefined): TimeseriesBucket {
+  const b = value ?? "hour";
+  if (b !== "hour" && b !== "day") {
+    throw new LcaError({
+      httpStatus: 400,
+      code: "invalid_request",
+      message: "invalid bucket: expected 'hour' or 'day'",
+      details: { allowed: ["hour", "day"] },
+    });
+  }
+  return b;
+}
+
+const plugin: FastifyPluginAsync<AnomaliesDeps> = async (fastify, deps) => {
+  fastify.get("/v1/telemetry/anomalies", async (req, reply) => {
+    const q = req.query as Record<string, string | undefined>;
+
+    const bucket = parseBucket(q["bucket"]);
+    const until = q["until"] ? parseDate(q["until"], "until") : new Date();
+    const since = q["since"]
+      ? parseDate(q["since"], "since")
+      : new Date(until.getTime() - DEFAULT_WINDOW_MS[bucket]);
+
+    if (since.getTime() >= until.getTime()) {
+      throw new LcaError({
+        httpStatus: 400,
+        code: "invalid_request",
+        message: "invalid range: since must be strictly before until",
+      });
+    }
+    const maxWindowMs = MAX_WINDOW_DAYS[bucket] * DAY_MS;
+    if (until.getTime() - since.getTime() > maxWindowMs) {
+      throw new LcaError({
+        httpStatus: 400,
+        code: "invalid_request",
+        message: `requested window exceeds the maximum of ${MAX_WINDOW_DAYS[bucket]} days for bucket '${bucket}'`,
+        details: { bucket, maxWindowDays: MAX_WINDOW_DAYS[bucket] },
+      });
+    }
+
+    const filters: AnomalyFilters = {
+      since: since.toISOString(),
+      until: until.toISOString(),
+      bucket,
+      now: new Date().toISOString(),
+    };
+    if (q["clientId"]) filters.clientId = q["clientId"];
+    if (q["providerId"]) filters.providerId = q["providerId"];
+    if (q["modelId"]) filters.modelId = q["modelId"];
+
+    const anomalies = await detectCostAnomalies(deps.db, filters, deps.anomalyConfig);
+    return reply.status(200).send({
+      window: { since: filters.since, until: filters.until },
+      bucket,
+      thresholds: {
+        minHistory: deps.anomalyConfig.minHistory,
+        relThreshold: deps.anomalyConfig.relThreshold,
+        criticalRelThreshold: deps.anomalyConfig.criticalRelThreshold,
+        minAbsoluteUsd: deps.anomalyConfig.minAbsoluteUsd,
+      },
+      anomalies,
+    });
+  });
+};
+
+export default plugin;

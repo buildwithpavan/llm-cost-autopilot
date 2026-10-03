@@ -6,8 +6,10 @@ import {
   getTelemetrySummary,
   listTelemetryEvents,
   getTelemetryTimeseries,
+  getTelemetryAnomalies,
   type TelemetrySummaryResponse,
   type TimeseriesResponse,
+  type AnomaliesResponse,
 } from "../../lib/api/telemetry.js";
 import { getCatalog, type CatalogResponse } from "../../lib/api/catalog.js";
 import { getReconciliationMetrics, type ReconciliationMetrics } from "../../lib/api/metrics.js";
@@ -56,6 +58,7 @@ export interface UseCostDataResult {
   budgets: Async<BudgetStatusResponse>;
   budgetDecisions: Async<BudgetDecisionsResponse>;
   timeseries: Async<TimeseriesResponse>;
+  anomalies: Async<AnomaliesResponse>;
   refresh: () => void;
 }
 
@@ -86,6 +89,8 @@ export function useCostData(): UseCostDataResult {
   const budgetDecReqId = useRef(0);
   const [timeseries, setTimeseries] = useState<Async<TimeseriesResponse>>({ status: "loading" });
   const seriesReqId = useRef(0);
+  const [anomalies, setAnomalies] = useState<Async<AnomaliesResponse>>({ status: "loading" });
+  const anomalyReqId = useRef(0);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -239,6 +244,36 @@ export function useCostData(): UseCostDataResult {
     return () => ctrl.abort();
   }, [env, range, providerId, modelId, tick]);
 
+  // Cost anomalies for the "Cost Anomalies" panel. Independent source (own
+  // request id + state + catch), keyed on the same range + provider/model
+  // filters; bucket is derived deterministically from the range.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const { signal } = ctrl;
+    const id = ++anomalyReqId.current;
+    const until = new Date();
+    const since = new Date(until.getTime() - RANGE_MS[range]);
+    const bucket = bucketForRange(range);
+    setAnomalies({ status: "loading" });
+    getTelemetryAnomalies({
+      since: since.toISOString(),
+      until: until.toISOString(),
+      bucket,
+      ...(providerId ? { providerId } : {}),
+      ...(modelId ? { modelId } : {}),
+      ...(env.apiKey ? { apiKey: env.apiKey } : {}),
+      signal,
+    })
+      .then((data) => {
+        if (id === anomalyReqId.current) setAnomalies({ status: "ready", data });
+      })
+      .catch((err) => {
+        if (!signal.aborted && id === anomalyReqId.current)
+          setAnomalies({ status: "error", message: errMessage(err, "Anomalies unavailable") });
+      });
+    return () => ctrl.abort();
+  }, [env, range, providerId, modelId, tick]);
+
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   return {
@@ -256,6 +291,7 @@ export function useCostData(): UseCostDataResult {
     budgets,
     budgetDecisions,
     timeseries,
+    anomalies,
     refresh,
   };
 }

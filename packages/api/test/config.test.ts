@@ -93,3 +93,47 @@ describe("circuit breaker config (Phase 9)", () => {
   });
 });
 
+describe("cost anomaly config (Phase 12)", () => {
+  it("applies deterministic safe defaults", () => {
+    const c = loadConfig(BASE);
+    expect(c.LCA_ANOMALY_MIN_HISTORY).toBe(6);
+    expect(c.LCA_ANOMALY_REL_THRESHOLD).toBe(0.5);
+    expect(c.LCA_ANOMALY_CRIT_REL_THRESHOLD).toBe(1);
+    expect(c.LCA_ANOMALY_MIN_ABS_USD).toBe("0.010000");
+  });
+
+  it("accepts valid overrides", () => {
+    const c = loadConfig({
+      ...BASE,
+      LCA_ANOMALY_MIN_HISTORY: "12",
+      LCA_ANOMALY_REL_THRESHOLD: "0.75",
+      LCA_ANOMALY_CRIT_REL_THRESHOLD: "2",
+      LCA_ANOMALY_MIN_ABS_USD: "0.500000",
+    });
+    expect(c.LCA_ANOMALY_MIN_HISTORY).toBe(12);
+    expect(c.LCA_ANOMALY_REL_THRESHOLD).toBe(0.75);
+    expect(c.LCA_ANOMALY_CRIT_REL_THRESHOLD).toBe(2);
+    expect(c.LCA_ANOMALY_MIN_ABS_USD).toBe("0.500000");
+  });
+
+  it("rejects a non-positive or non-integer min history", () => {
+    expect(() => loadConfig({ ...BASE, LCA_ANOMALY_MIN_HISTORY: "0" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_ANOMALY_MIN_HISTORY: "2.5" })).toThrow();
+  });
+
+  it("rejects a non-positive relative threshold", () => {
+    expect(() => loadConfig({ ...BASE, LCA_ANOMALY_REL_THRESHOLD: "0" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_ANOMALY_REL_THRESHOLD: "-1" })).toThrow();
+  });
+
+  it("rejects a non-decimal absolute floor", () => {
+    expect(() => loadConfig({ ...BASE, LCA_ANOMALY_MIN_ABS_USD: "abc" })).toThrow();
+  });
+
+  it("rejects a critical threshold below the warning threshold", () => {
+    expect(() =>
+      loadConfig({ ...BASE, LCA_ANOMALY_REL_THRESHOLD: "0.8", LCA_ANOMALY_CRIT_REL_THRESHOLD: "0.5" }),
+    ).toThrow();
+  });
+});
+

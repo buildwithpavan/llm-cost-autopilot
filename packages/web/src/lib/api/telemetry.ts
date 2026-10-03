@@ -140,3 +140,60 @@ export function getTelemetryTimeseries(opts: TimeseriesOptions = {}): Promise<Ti
   return apiRequest<TimeseriesResponse>(path, reqOpts);
 }
 
+export type AnomalySeverity = "warning" | "critical";
+
+/** One deterministic cost anomaly. All monetary fields are exact decimal strings. */
+export interface AnomalyRecord {
+  bucketStart: string;
+  estimatedCostUsd: string;
+  baselineEstimatedCostUsd: string;
+  deviationUsd: string;
+  /** Percentage deviation above baseline, decimal string (e.g. "60.00"). */
+  deviationPercent: string;
+  historicalBucketCount: number;
+  severity: AnomalySeverity;
+}
+
+export interface AnomalyThresholds {
+  minHistory: number;
+  relThreshold: string;
+  criticalRelThreshold: string;
+  minAbsoluteUsd: string;
+}
+
+export interface AnomaliesResponse {
+  window: { since: string; until: string };
+  bucket: TimeseriesBucket;
+  thresholds: AnomalyThresholds;
+  anomalies: AnomalyRecord[];
+}
+
+export interface AnomaliesOptions {
+  since?: string;
+  until?: string;
+  bucket?: TimeseriesBucket;
+  clientId?: string;
+  providerId?: string;
+  modelId?: string;
+  apiKey?: string;
+  signal?: AbortSignal;
+}
+
+// Mirrors GET /v1/telemetry/anomalies (since/until/bucket/clientId/providerId/modelId).
+// Monetary values stay as exact decimal strings — never converted to Number here.
+export function getTelemetryAnomalies(opts: AnomaliesOptions = {}): Promise<AnomaliesResponse> {
+  const q = new URLSearchParams();
+  if (opts.since) q.set("since", opts.since);
+  if (opts.until) q.set("until", opts.until);
+  if (opts.bucket) q.set("bucket", opts.bucket);
+  if (opts.clientId) q.set("clientId", opts.clientId);
+  if (opts.providerId) q.set("providerId", opts.providerId);
+  if (opts.modelId) q.set("modelId", opts.modelId);
+  const search = q.toString();
+  const path = `/v1/telemetry/anomalies${search ? `?${search}` : ""}`;
+  const reqOpts: { apiKey?: string; signal?: AbortSignal } = {};
+  if (opts.apiKey) reqOpts.apiKey = opts.apiKey;
+  if (opts.signal) reqOpts.signal = opts.signal;
+  return apiRequest<AnomaliesResponse>(path, reqOpts);
+}
+
