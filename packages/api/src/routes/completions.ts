@@ -19,12 +19,15 @@ import { loadCatalogSnapshot, type AppContext } from "../wiring.js";
 import { buildRoutingDecision, resolveGovernance } from "../routing/resolve-decision.js";
 import { evaluateRequestBudgets } from "../budgets/evaluate-request-budgets.js";
 import { LcaError } from "../plugins/errors.js";
+import { recordCompletionMetrics } from "../plugins/request-metrics.js";
+import type { Metrics } from "../plugins/metrics.js";
 import { sharedStreamBus, type TelemetryStreamBus } from "../plugins/stream-bus.js";
 
 export interface CompletionsDeps extends AppContext {
   telemetryWriter: TelemetryWriter;
   ruleStore?: OperatorRuleStore;
   streamBus?: TelemetryStreamBus;
+  metrics?: Metrics;
 }
 
 interface CompletionResponseBody extends NormalizedResponse {
@@ -61,6 +64,10 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
   const bus = deps.streamBus ?? sharedStreamBus;
 
   fastify.post("/v1/completions", async (req, reply) => {
+    const startedAt = process.hrtime.bigint();
+    const timing: { routingOverheadMs: number | null } = { routingOverheadMs: null };
+    let caught: unknown;
+    try {
     const parsed = completionRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new LcaError({
@@ -91,6 +98,7 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
     // event/SSE ordering matches the completion contract. Side effects
     // (telemetry, provider calls, fallback) stay in this route.
     const rules = deps.ruleStore ? await deps.ruleStore.snapshot() : [];
+    const routingStart = process.hrtime.bigint();
     const resolution = resolveGovernance({ request: normalized, rules, snapshot });
 
     bus.publish({
@@ -104,6 +112,8 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
     });
 
     const decision = buildRoutingDecision({ request: normalized, resolution, snapshot });
+    // Routing/decision phase only (excludes catalog load, budget evaluation, provider execution).
+    timing.routingOverheadMs = Number(process.hrtime.bigint() - routingStart) / 1e6;
 
     // Budget guardrail: evaluated after the routing decision (whose estimated
     // cost is the enforcement basis) and before any provider invocation. Soft
@@ -375,6 +385,23 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
       decision,
     };
     return reply.status(200).send(body);
+    } catch (err) {
+      caught = err;
+      throw err;
+    } finally {
+      // Single terminal finalization point for request-level metrics.
+      if (deps.metrics) {
+        try {
+          recordCompletionMetrics(deps.metrics, {
+            error: caught,
+            startedAt,
+            routingOverheadMs: timing.routingOverheadMs,
+          });
+        } catch (e) {
+          req.log.error({ err: e }, "request metric recording failed");
+        }
+      }
+    }
   });
 };
 

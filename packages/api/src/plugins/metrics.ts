@@ -17,22 +17,21 @@ export function createMetrics(): Metrics {
 
   const requestsTotal = new Counter({
     name: "lca_requests_total",
-    help: "Total number of completion requests handled.",
-    labelNames: ["status", "provider_id", "model_id", "decision_source"],
+    help: "Completion requests by terminal outcome. One increment per completion request that enters the route handler.",
+    labelNames: ["outcome"],
     registers: [registry],
   });
 
   const requestDurationSeconds = new Histogram({
     name: "lca_request_duration_seconds",
-    help: "End-to-end request duration.",
-    labelNames: ["provider_id", "model_id"],
+    help: "Completion request lifecycle duration (handler entry → terminal outcome), one observation per request.",
     buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30],
     registers: [registry],
   });
 
   const routingOverheadMs = new Histogram({
     name: "lca_routing_overhead_ms",
-    help: "Milliseconds spent in the routing pipeline (excluding provider call).",
+    help: "Milliseconds in the routing/decision phase (governance + decision build; excludes catalog load, budget evaluation, and provider execution). Observed only when a routing decision is finalized.",
     buckets: [1, 2, 5, 10, 20, 50, 75, 100, 150, 250, 500],
     registers: [registry],
   });

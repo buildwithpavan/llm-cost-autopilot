@@ -95,6 +95,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     db: deps.db,
     registry: deps.registry,
     telemetryWriter: deps.telemetryWriter,
+    metrics,
     ...(deps.ruleStore ? { ruleStore: deps.ruleStore } : {}),
     ...(deps.budgetStore ? { budgetStore: deps.budgetStore } : {}),
   });
