@@ -6,17 +6,18 @@ Concrete playbooks for running the backend in dev, staging, and production. This
 
 1. [Environment configuration](#environment-configuration)
 2. [Provider reliability (timeout + retry)](#provider-reliability-timeout--retry)
-3. [Deployment shape](#deployment-shape)
-4. [Database migrations](#database-migrations)
-5. [Pricing snapshots](#pricing-snapshots)
-6. [Provider registration and health](#provider-registration-and-health)
-7. [Operator rules](#operator-rules)
-8. [API keys](#api-keys)
-9. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
-10. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
-11. [Observability endpoints](#observability-endpoints)
-12. [Backup and restore](#backup-and-restore)
-13. [Incident playbooks](#incident-playbooks)
+3. [Provider circuit breaker](#provider-circuit-breaker)
+4. [Deployment shape](#deployment-shape)
+5. [Database migrations](#database-migrations)
+6. [Pricing snapshots](#pricing-snapshots)
+7. [Provider registration and health](#provider-registration-and-health)
+8. [Operator rules](#operator-rules)
+9. [API keys](#api-keys)
+10. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
+11. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
+12. [Observability endpoints](#observability-endpoints)
+13. [Backup and restore](#backup-and-restore)
+14. [Incident playbooks](#incident-playbooks)
 
 ---
 
@@ -40,6 +41,9 @@ Configuration is loaded by [packages/api/src/config.ts](../packages/api/src/conf
 | `LCA_PROVIDER_MAX_RETRIES` | no (`0`) | Additional retries of the **same** provider candidate on a retryable failure, before fallback. Integer `0`–`5`. Default `0` preserves the reviewed fallback behavior; set `≥ 1` to opt in. |
 | `LCA_PROVIDER_RETRY_BACKOFF_MS` | no (`100`) | Base backoff before the first retry, in milliseconds (non-negative integer ≤ 60000). `0` disables sleeping between retries. |
 | `LCA_PROVIDER_RETRY_BACKOFF_MAX_MS` | no (`2000`) | Cap on any single backoff delay, in milliseconds (non-negative integer ≤ 120000). |
+| `LCA_CIRCUIT_ENABLED` | no (`true`) | Enable the process-local provider circuit breaker. `true`/`false`. |
+| `LCA_CIRCUIT_FAILURE_THRESHOLD` | no (`5`) | Consecutive provider **availability** failures (per provider) that OPEN the circuit. Positive integer (≤ 100). |
+| `LCA_CIRCUIT_COOLDOWN_MS` | no (`30000`) | Time a circuit stays OPEN before allowing a single HALF_OPEN probe, in milliseconds. Positive integer (≤ 3600000). |
 
 Provider credentials are read at process start only. Rotating them requires a restart.
 
@@ -55,6 +59,43 @@ Each physical provider call is wrapped by [packages/api/src/routing/provider-att
 **Interaction with fallback.** Retrying a candidate is distinct from moving to the next candidate. A candidate is first retried per policy; only if it still fails with a retryable class does the existing fallback executor select the next candidate, which then runs under the same bounded policy. Provider selection order is unchanged. Retries of a candidate collapse into that candidate's single telemetry attempt, so the persisted `attempts` array still holds at most two entries (chosen + one fallback) and Phase-7 request metrics still count one logical request, one duration observation, and unchanged routing overhead per request regardless of retries.
 
 **Budget safety.** Budget evaluation happens before provider execution and is never re-evaluated or re-reserved across retries; a budget-blocked request never enters retry logic and produces no provider attempt.
+
+
+## Provider circuit breaker
+
+A **process-local** circuit breaker ([packages/api/src/routing/circuit-breaker.ts](../packages/api/src/routing/circuit-breaker.ts)) protects each provider at the execution boundary (the narrowest point that can prevent an execution). It is enabled by default (`LCA_CIRCUIT_ENABLED`).
+
+**States.**
+
+- **CLOSED** — the provider executes normally. Consecutive availability failures are counted.
+- **OPEN** — execution is skipped; the provider is treated as temporarily unavailable. After `LCA_CIRCUIT_COOLDOWN_MS` the next request transitions it to HALF_OPEN.
+- **HALF_OPEN** — exactly one request is allowed through as a probe; concurrent requests are not admitted. A successful (or reachable, i.e. non-availability-error) probe CLOSEs the circuit; an availability-failure probe reOPENs it and restarts the cooldown.
+
+**Transitions.** `CLOSED → OPEN` at `LCA_CIRCUIT_FAILURE_THRESHOLD` consecutive availability failures; `OPEN → HALF_OPEN` after the cooldown; `HALF_OPEN → CLOSED` on a successful probe; `HALF_OPEN → OPEN` on a failed probe. A successful CLOSED execution resets the consecutive-failure count. Each transition is logged (`provider circuit transition`, provider id + direction only — never request content) and reflected in metrics.
+
+**Which errors trip it.** Only provider **availability** failures contribute: `timeout`, `rate_limit`, `upstream_5xx`, `provider_unavailable`. Deterministic client/validation/routing errors (`upstream_4xx`, `invalid_request`, `context_exceeded`, `override_target_missing`) never trip the circuit. Governance failures and budget blocks never reach provider execution, so they can never affect circuit state.
+
+**Retry interaction (Phase 8).** The circuit check happens once per provider **candidate**, before execution; if admitted, the Phase 8 timeout/retry policy runs normally and the single logical outcome (success, or the final failure after retries) updates the circuit. Retry depth therefore never multiplies circuit failure accounting — `maxRetries` does not change circuit sensitivity.
+
+**Fallback interaction.** An OPEN circuit is a *skip*, not an execution: no adapter call, no timeout/retry, and no `execution.*` stream event. The skip is surfaced as a `provider_unavailable` candidate outcome, so the existing fallback executor moves to the next candidate (fallback eligibility now includes `provider_unavailable`). Provider ordering is unchanged. If every candidate's circuit is OPEN, the request terminates with the existing `terminal_fallback_exhausted` (HTTP 502) contract.
+
+**Budget interaction.** Circuit state never bypasses budget checks, never triggers budget re-evaluation, and never creates budget audit records or spend. A budget-blocked request touches no provider and therefore no circuit state.
+
+**State ownership & limitations.** Circuit state is in-memory and **per process**:
+
+- it **resets on process restart**;
+- the circuit metrics below are **process-local** (not aggregated across replicas);
+- this MVP does **not** provide cross-instance / distributed circuit coordination.
+
+It is intentionally separate from the persisted provider-health probe scheduler (`provider_health_state`): the scheduler reacts to periodic `probeHealth()` calls and gates routing *candidate* selection, whereas the circuit breaker reacts to real completion-execution outcomes and gates *execution*. Neither resets the other's counters.
+
+**Metrics** (bounded, no provider/model/client labels):
+
+- `lca_circuit_open_providers` (gauge) — providers currently OPEN.
+- `lca_circuit_transitions_total{to}` (counter) — transitions by destination state (`open`/`half_open`/`closed`).
+- `lca_circuit_blocked_total` (counter) — executions skipped due to an OPEN circuit.
+
+A request skipped because a provider circuit is OPEN remains exactly one logical request (`lca_requests_total`, `lca_request_duration_seconds`, and `lca_routing_overhead_ms` semantics are unchanged).
 
 
 ## Deployment shape
@@ -209,6 +250,7 @@ When the alert fires:
   - `lca_requests_total{outcome}` (counter) — one increment per completion request that enters the `/v1/completions` handler, keyed only by the bounded `outcome` label `{success, client_error, provider_error, budget_blocked, internal_error}`. A budget block counts as one request with `outcome="budget_blocked"` (no provider is executed). Fallback chains count once per request, not once per attempt. No per-client, per-provider, per-model, or per-budget labels — cardinality is intentionally bounded.
   - `lca_request_duration_seconds` (histogram, unlabelled) — one observation per completion request, measured monotonically (`process.hrtime`) from handler entry to the terminal outcome (success, provider failure, fallback exhaustion, budget block, or validation/internal failure). Retries/attempts are not observed separately.
   - `lca_routing_overhead_ms` (histogram, unlabelled) — milliseconds spent in the routing/decision phase (governance resolution + decision build) only. It excludes catalog load, budget evaluation, and provider execution, and is observed only for requests that finalize a routing decision — requests rejected before routing (e.g. schema validation failures) produce no observation.
+  - `lca_circuit_open_providers` (gauge), `lca_circuit_transitions_total{to}` (counter), `lca_circuit_blocked_total` (counter) — process-local provider circuit breaker aggregates; no provider/model/client labels. See [Provider circuit breaker](#provider-circuit-breaker).
   - For request-level breakdowns that need per-client/per-provider detail, use per-request telemetry (`GET /v1/telemetry/events`); the metrics above are deliberately low-cardinality.
 - `x-request-id` header — echoed on every response and used as the `TelemetryEvent.eventId`. Propagated into pino log lines (`reqId`) and OpenTelemetry span attributes.
 - `GET /v1/health` (public) — reports DB reachability and active pricing.

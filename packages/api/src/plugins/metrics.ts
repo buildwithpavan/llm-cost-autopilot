@@ -9,6 +9,9 @@ export interface Metrics {
   reconciliationAlertActive: Gauge<string>;
   budgetUtilization: Gauge<string>;
   budgetAlertActive: Gauge<string>;
+  circuitOpenProviders: Gauge<string>;
+  circuitTransitionsTotal: Counter<string>;
+  circuitBlockedTotal: Counter<string>;
 }
 
 export function createMetrics(): Metrics {
@@ -63,6 +66,27 @@ export function createMetrics(): Metrics {
     registers: [registry],
   });
 
+  // Provider circuit breaker (Phase 9). Process-local aggregates; no provider
+  // labels (bounded cardinality). See docs/operations.md#provider-circuit-breaker.
+  const circuitOpenProviders = new Gauge({
+    name: "lca_circuit_open_providers",
+    help: "Number of providers whose circuit is currently OPEN (process-local).",
+    registers: [registry],
+  });
+
+  const circuitTransitionsTotal = new Counter({
+    name: "lca_circuit_transitions_total",
+    help: "Circuit-breaker state transitions by destination state.",
+    labelNames: ["to"],
+    registers: [registry],
+  });
+
+  const circuitBlockedTotal = new Counter({
+    name: "lca_circuit_blocked_total",
+    help: "Provider executions skipped because the provider circuit was OPEN.",
+    registers: [registry],
+  });
+
   return {
     registry,
     requestsTotal,
@@ -72,6 +96,9 @@ export function createMetrics(): Metrics {
     reconciliationAlertActive,
     budgetUtilization,
     budgetAlertActive,
+    circuitOpenProviders,
+    circuitTransitionsTotal,
+    circuitBlockedTotal,
   };
 }
 

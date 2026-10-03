@@ -7,10 +7,15 @@ import type {
   TelemetryEvent,
 } from "../types/telemetry.js";
 
-const TRANSIENT: ReadonlySet<ErrorClass> = new Set([
+// First-attempt error classes that legitimately precede a fallback attempt:
+// the transient set plus `provider_unavailable` (a skipped candidate, e.g. an
+// open circuit breaker or missing adapter). Mirrors FALLBACK_ELIGIBLE in
+// routing/execute-with-fallback.ts.
+const FALLBACK_ELIGIBLE: ReadonlySet<ErrorClass> = new Set([
   "timeout",
   "rate_limit",
   "upstream_5xx",
+  "provider_unavailable",
 ]);
 
 export interface BuildTelemetryEventInput {
@@ -38,9 +43,9 @@ export function buildTelemetryEvent(input: BuildTelemetryEventInput): TelemetryE
   }
   if (input.attempts.length === 2) {
     const first = input.attempts[0]!;
-    if (!TRANSIENT.has(first.errorClass)) {
+    if (!FALLBACK_ELIGIBLE.has(first.errorClass)) {
       throw new Error(
-        `buildTelemetryEvent: fallback attempt requires a transient first-attempt error (got ${first.errorClass})`,
+        `buildTelemetryEvent: fallback attempt requires an availability first-attempt error (got ${first.errorClass})`,
       );
     }
   }

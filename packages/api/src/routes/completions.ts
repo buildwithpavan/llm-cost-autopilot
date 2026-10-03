@@ -22,6 +22,7 @@ import {
   runProviderAttempt,
   type ProviderAttemptPolicy,
 } from "../routing/provider-attempt.js";
+import type { CircuitBreaker } from "../routing/circuit-breaker.js";
 import { evaluateRequestBudgets } from "../budgets/evaluate-request-budgets.js";
 import { LcaError } from "../plugins/errors.js";
 import { recordCompletionMetrics } from "../plugins/request-metrics.js";
@@ -34,6 +35,7 @@ export interface CompletionsDeps extends AppContext {
   streamBus?: TelemetryStreamBus;
   metrics?: Metrics;
   providerAttempt?: ProviderAttemptPolicy;
+  circuitBreaker?: CircuitBreaker;
 }
 
 interface CompletionResponseBody extends NormalizedResponse {
@@ -244,6 +246,35 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
       decision,
       pricingTable: snapshot.pricingTable,
       execute: async ({ providerId, modelId, attemptIndex }) => {
+        // Circuit breaker gate (before any execution). An OPEN circuit skips the
+        // provider without executing, without timeout/retry, and without an
+        // execution.* stream event — it returns a provider_unavailable result so
+        // the existing fallback moves to the next candidate.
+        if (deps.circuitBreaker) {
+          const gate = deps.circuitBreaker.tryAcquire(providerId);
+          if (!gate.allowed) {
+            req.log.warn({ provider: providerId, circuit: "open" }, "circuit open: skipping provider execution");
+            deps.metrics?.circuitBlockedTotal.inc();
+            const now = new Date().toISOString();
+            return {
+              kind: "failure" as const,
+              attempt: {
+                attemptIndex,
+                providerId,
+                modelId,
+                startedAt: now,
+                endedAt: now,
+                latencyMs: 0,
+                inputTokens: null,
+                outputTokens: null,
+                errorClass: "provider_unavailable" as const,
+                estimatedCostUsd: "0",
+                actualCostUsd: null,
+                pricingTableVersionId: snapshot.pricingTable.versionId,
+              },
+            };
+          }
+        }
         bus.publish({
           eventType: "execution.started",
           eventId,
@@ -293,6 +324,12 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
           attemptIndex,
           policy: providerPolicy,
         });
+        // One logical circuit outcome per candidate (after Phase 8 retries), so
+        // retry depth never multiplies circuit failure accounting.
+        deps.circuitBreaker?.recordOutcome(
+          providerId,
+          outcome.kind === "success" ? "none" : outcome.attempt.errorClass,
+        );
         if (outcome.kind === "success") {
           const attempt = { ...outcome.attempt, attemptIndex };
           bus.publish({

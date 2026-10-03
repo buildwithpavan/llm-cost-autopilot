@@ -191,7 +191,7 @@ describe("buildTelemetryEvent", () => {
     ).toThrow(/attempts.*2/i);
   });
 
-  it("rejects a two-attempt chain where the first error is non-transient (FR-033)", () => {
+  it("rejects a two-attempt chain where the first error is non-eligible (FR-033)", () => {
     const badFirst: Attempt = { ...FAIL_ATTEMPT, errorClass: "upstream_4xx" };
     expect(() =>
       buildTelemetryEvent({
@@ -200,6 +200,6 @@ describe("buildTelemetryEvent", () => {
         attempts: [badFirst, FALLBACK_ATTEMPT],
         totalLatencyMs: 180,
       }),
-    ).toThrow(/transient/i);
+    ).toThrow(/availability/i);
   });
 });

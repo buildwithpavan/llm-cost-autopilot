@@ -56,3 +56,40 @@ describe("provider reliability config (Phase 8)", () => {
     expect(c.LCA_PROVIDER_RETRY_BACKOFF_MS).toBe(0);
   });
 });
+
+describe("circuit breaker config (Phase 9)", () => {
+  it("applies deterministic safe defaults", () => {
+    const c = loadConfig(BASE);
+    expect(c.LCA_CIRCUIT_ENABLED).toBe(true);
+    expect(c.LCA_CIRCUIT_FAILURE_THRESHOLD).toBe(5);
+    expect(c.LCA_CIRCUIT_COOLDOWN_MS).toBe(30_000);
+  });
+
+  it("accepts valid overrides and can be disabled", () => {
+    const c = loadConfig({
+      ...BASE,
+      LCA_CIRCUIT_ENABLED: "false",
+      LCA_CIRCUIT_FAILURE_THRESHOLD: "2",
+      LCA_CIRCUIT_COOLDOWN_MS: "100",
+    });
+    expect(c.LCA_CIRCUIT_ENABLED).toBe(false);
+    expect(c.LCA_CIRCUIT_FAILURE_THRESHOLD).toBe(2);
+    expect(c.LCA_CIRCUIT_COOLDOWN_MS).toBe(100);
+  });
+
+  it("rejects a non-positive or non-integer threshold", () => {
+    expect(() => loadConfig({ ...BASE, LCA_CIRCUIT_FAILURE_THRESHOLD: "0" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_CIRCUIT_FAILURE_THRESHOLD: "-1" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_CIRCUIT_FAILURE_THRESHOLD: "2.5" })).toThrow();
+  });
+
+  it("rejects a non-positive cooldown", () => {
+    expect(() => loadConfig({ ...BASE, LCA_CIRCUIT_COOLDOWN_MS: "0" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_CIRCUIT_COOLDOWN_MS: "-5" })).toThrow();
+  });
+
+  it("rejects an invalid enabled flag", () => {
+    expect(() => loadConfig({ ...BASE, LCA_CIRCUIT_ENABLED: "yes" })).toThrow();
+  });
+});
+

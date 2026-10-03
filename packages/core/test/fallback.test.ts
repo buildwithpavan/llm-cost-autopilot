@@ -161,6 +161,33 @@ describe("executeWithFallback (FR-033/034/035)", () => {
     }
   });
 
+  it("falls back once on a provider_unavailable candidate (e.g. open circuit skip)", async () => {
+    let call = 0;
+    const execute = vi.fn(async () => {
+      call++;
+      if (call === 1) {
+        return { kind: "failure" as const, attempt: mkAttempt({ errorClass: "provider_unavailable", attemptIndex: 0 }) };
+      }
+      return {
+        kind: "success" as const,
+        content: "recovered",
+        finishReason: "stop",
+        attempt: mkAttempt({ attemptIndex: 1, providerId: "fallback", modelId: "fallback:m", errorClass: "none" }),
+      };
+    });
+    const result = await executeWithFallback({
+      request: mkRequest(),
+      decision: mkDecision(),
+      pricingTable: PRICING,
+      execute,
+    });
+    expect(result.attempts).toHaveLength(2);
+    expect(result.attempts[0]!.errorClass).toBe("provider_unavailable");
+    expect(result.attempts[1]!.errorClass).toBe("none");
+    expect(result.terminalErrorClass).toBe("none");
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
   it("does NOT fallback when the decision source is a client_override", async () => {
     let call = 0;
     const execute = vi.fn(async () => {

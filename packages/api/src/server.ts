@@ -8,6 +8,11 @@ import type { ProviderRegistry } from "@lca/providers";
 import type { LcaConfig } from "./config.js";
 import { getSharedMetrics, type Metrics } from "./plugins/metrics.js";
 import { policyFromConfig } from "./routing/provider-attempt.js";
+import {
+  circuitConfigFrom,
+  createCircuitBreaker,
+  type CircuitBreaker,
+} from "./routing/circuit-breaker.js";
 import authPlugin from "./plugins/auth.js";
 import { errorHandler } from "./plugins/errors.js";
 import healthRoute from "./routes/health.js";
@@ -34,6 +39,7 @@ export interface ServerDeps {
   ruleStore?: OperatorRuleStore;
   budgetStore?: BudgetStore;
   metrics?: Metrics;
+  circuitBreaker?: CircuitBreaker;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -92,12 +98,25 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     publicPaths: ["/v1/health", "/metrics"],
   });
 
+  // Process-local provider circuit breaker. Transitions update bounded metrics
+  // and emit structured operational logs (provider id only; no request content).
+  const circuitBreaker =
+    deps.circuitBreaker ??
+    createCircuitBreaker(circuitConfigFrom(deps.config), {
+      onTransition: (providerId, from, to) => {
+        app.log.warn({ provider: providerId, from, to }, "provider circuit transition");
+        metrics.circuitTransitionsTotal.inc({ to });
+        metrics.circuitOpenProviders.set(circuitBreaker.openProviderCount());
+      },
+    });
+
   await app.register(completionsRoute, {
     db: deps.db,
     registry: deps.registry,
     telemetryWriter: deps.telemetryWriter,
     metrics,
     providerAttempt: policyFromConfig(deps.config),
+    circuitBreaker,
     ...(deps.ruleStore ? { ruleStore: deps.ruleStore } : {}),
     ...(deps.budgetStore ? { budgetStore: deps.budgetStore } : {}),
   });

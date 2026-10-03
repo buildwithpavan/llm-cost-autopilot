@@ -17,6 +17,10 @@ const envSchema = z.object({
   LCA_PROVIDER_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(0),
   LCA_PROVIDER_RETRY_BACKOFF_MS: z.coerce.number().int().min(0).max(60_000).default(100),
   LCA_PROVIDER_RETRY_BACKOFF_MAX_MS: z.coerce.number().int().min(0).max(120_000).default(2_000),
+  // Provider reliability (Phase 9). Process-local circuit breaker / cooldown.
+  LCA_CIRCUIT_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  LCA_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().positive().max(100).default(5),
+  LCA_CIRCUIT_COOLDOWN_MS: z.coerce.number().int().positive().max(3_600_000).default(30_000),
 });
 
 export type LcaConfig = z.infer<typeof envSchema>;

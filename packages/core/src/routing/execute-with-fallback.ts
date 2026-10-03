@@ -12,6 +12,14 @@ const TRANSIENT: ReadonlySet<ErrorClass> = new Set([
   "upstream_5xx",
 ]);
 
+// Availability failures that are eligible to fall back to the next candidate.
+// Superset of TRANSIENT: a `provider_unavailable` candidate (missing adapter or
+// an open circuit breaker skip) should also fall back rather than terminate.
+const FALLBACK_ELIGIBLE: ReadonlySet<ErrorClass> = new Set([
+  ...TRANSIENT,
+  "provider_unavailable",
+]);
+
 export interface ExecuteWithFallbackInput {
   readonly request: NormalizedRequest;
   readonly decision: RoutingDecision;
@@ -53,7 +61,8 @@ export interface FallbackResult {
  *
  * Behavior:
  *  - Executes the chosen candidate; on success returns immediately.
- *  - On transient failure (timeout / rate_limit / upstream_5xx) attempts exactly
+ *  - On an availability failure (timeout / rate_limit / upstream_5xx, or a
+ *    provider_unavailable skip such as an open circuit breaker) attempts exactly
  *    one fallback against the next candidate from the same routing decision,
  *    provided the decision came from autopilot (not override) AND a next
  *    candidate exists.
@@ -80,7 +89,7 @@ export async function executeWithFallback(input: ExecuteWithFallbackInput): Prom
 
   const errorClass = firstAttempt.errorClass;
   const eligibleForFallback =
-    input.decision.decisionSource === "autopilot" && TRANSIENT.has(errorClass);
+    input.decision.decisionSource === "autopilot" && FALLBACK_ELIGIBLE.has(errorClass);
 
   const next = pickNextCandidate(input.decision);
   if (!eligibleForFallback || !next) {
