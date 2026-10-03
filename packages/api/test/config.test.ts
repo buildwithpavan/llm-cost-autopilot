@@ -57,6 +57,23 @@ describe("provider reliability config (Phase 8)", () => {
   });
 });
 
+describe("logical-request deadline config (Phase 14)", () => {
+  it("defaults to disabled (0)", () => {
+    expect(loadConfig(BASE).LCA_REQUEST_DEADLINE_MS).toBe(0);
+  });
+
+  it("accepts a positive override", () => {
+    expect(loadConfig({ ...BASE, LCA_REQUEST_DEADLINE_MS: "60000" }).LCA_REQUEST_DEADLINE_MS).toBe(60_000);
+  });
+
+  it("rejects negative, non-integer, or over-bound values", () => {
+    expect(() => loadConfig({ ...BASE, LCA_REQUEST_DEADLINE_MS: "-1" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_REQUEST_DEADLINE_MS: "1.5" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_REQUEST_DEADLINE_MS: "abc" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_REQUEST_DEADLINE_MS: "1200001" })).toThrow();
+  });
+});
+
 describe("circuit breaker config (Phase 9)", () => {
   it("applies deterministic safe defaults", () => {
     const c = loadConfig(BASE);

@@ -241,11 +241,42 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
 
     const requestStart = Date.now();
     const providerPolicy = deps.providerAttempt ?? DEFAULT_PROVIDER_ATTEMPT_POLICY;
+    // Optional logical-request deadline bounding TOTAL provider execution across
+    // retries + fallback (0 = disabled). Shared absolute instant for all candidates.
+    const logicalDeadlineAt =
+      providerPolicy.requestDeadlineMs > 0 ? requestStart + providerPolicy.requestDeadlineMs : undefined;
+    let deadlineHit = false;
     const fallbackOutcome = await routing.executeWithFallback({
       request: normalized,
       decision,
       pricingTable: snapshot.pricingTable,
       execute: async ({ providerId, modelId, attemptIndex }) => {
+        // Logical-request deadline gate (before the circuit probe and any
+        // execution). A deadline-exhausted candidate is skipped without a
+        // provider call and without touching circuit state — the request's own
+        // prior failure, not this provider, is the real fault.
+        if (logicalDeadlineAt !== undefined && Date.now() >= logicalDeadlineAt) {
+          deadlineHit = true;
+          req.log.warn({ provider: providerId, deadlineMs: providerPolicy.requestDeadlineMs }, "request deadline reached: skipping provider execution");
+          const now = new Date().toISOString();
+          return {
+            kind: "failure" as const,
+            attempt: {
+              attemptIndex,
+              providerId,
+              modelId,
+              startedAt: now,
+              endedAt: now,
+              latencyMs: 0,
+              inputTokens: null,
+              outputTokens: null,
+              errorClass: "provider_unavailable" as const,
+              estimatedCostUsd: "0",
+              actualCostUsd: null,
+              pricingTableVersionId: snapshot.pricingTable.versionId,
+            },
+          };
+        }
         // Circuit breaker gate (before any execution). An OPEN circuit skips the
         // provider without executing, without timeout/retry, and without an
         // execution.* stream event — it returns a provider_unavailable result so
@@ -323,6 +354,7 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
           },
           attemptIndex,
           policy: providerPolicy,
+          ...(logicalDeadlineAt !== undefined ? { deadlineAt: logicalDeadlineAt } : {}),
         });
         // One logical circuit outcome per candidate (after Phase 8 retries), so
         // retry depth never multiplies circuit failure accounting.
@@ -361,6 +393,7 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
       },
     });
     const totalLatencyMs = Date.now() - requestStart;
+    if (deadlineHit) deps.metrics?.requestDeadlineExhaustedTotal.inc();
 
     const teleEvent = coreTelemetry.buildTelemetryEvent({
       eventId,

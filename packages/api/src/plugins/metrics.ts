@@ -12,6 +12,7 @@ export interface Metrics {
   circuitOpenProviders: Gauge<string>;
   circuitTransitionsTotal: Counter<string>;
   circuitBlockedTotal: Counter<string>;
+  requestDeadlineExhaustedTotal: Counter<string>;
 }
 
 export function createMetrics(): Metrics {
@@ -87,6 +88,14 @@ export function createMetrics(): Metrics {
     registers: [registry],
   });
 
+  // Phase 14: completion requests whose logical-request deadline stopped further
+  // provider execution (retries/fallback). Unlabelled; one increment per request.
+  const requestDeadlineExhaustedTotal = new Counter({
+    name: "lca_request_deadline_exhausted_total",
+    help: "Completion requests whose logical-request deadline halted further provider execution.",
+    registers: [registry],
+  });
+
   return {
     registry,
     requestsTotal,
@@ -99,6 +108,7 @@ export function createMetrics(): Metrics {
     circuitOpenProviders,
     circuitTransitionsTotal,
     circuitBlockedTotal,
+    requestDeadlineExhaustedTotal,
   };
 }
 

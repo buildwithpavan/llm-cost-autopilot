@@ -29,16 +29,26 @@ export interface ProviderAttemptPolicy {
   /** Per-attempt execution timeout in milliseconds (applies to one physical call). */
   readonly timeoutMs: number;
   readonly retry: RetryPolicy;
+  /**
+   * Optional logical-request deadline in milliseconds, bounding TOTAL provider
+   * execution (across retries AND fallback) from the start of execution. 0
+   * disables it. The caller converts this to an absolute instant shared by all
+   * candidates; the per-attempt `timeoutMs` is never replaced, only capped to
+   * the remaining budget.
+   */
+  readonly requestDeadlineMs: number;
 }
 
 /**
  * Conservative defaults. Retries are disabled by default (maxRetries = 0) so the
  * reviewed fallback behavior is unchanged; operators opt in via configuration.
- * The timeout matches the historical per-attempt deadline (30 s).
+ * The timeout matches the historical per-attempt deadline (30 s). The logical
+ * request deadline is disabled by default (0).
  */
 export const DEFAULT_PROVIDER_ATTEMPT_POLICY: ProviderAttemptPolicy = {
   timeoutMs: 30_000,
   retry: { maxRetries: 0, backoffBaseMs: 100, backoffMaxMs: 2_000 },
+  requestDeadlineMs: 0,
 };
 
 export function policyFromConfig(config: LcaConfig): ProviderAttemptPolicy {
@@ -49,6 +59,7 @@ export function policyFromConfig(config: LcaConfig): ProviderAttemptPolicy {
       backoffBaseMs: config.LCA_PROVIDER_RETRY_BACKOFF_MS,
       backoffMaxMs: config.LCA_PROVIDER_RETRY_BACKOFF_MAX_MS,
     },
+    requestDeadlineMs: config.LCA_REQUEST_DEADLINE_MS,
   };
 }
 
@@ -77,6 +88,16 @@ export interface RunProviderAttemptArgs {
   readonly policy: ProviderAttemptPolicy;
   /** Injectable sleep seam so tests avoid real backoff delays. */
   readonly sleep?: (ms: number) => Promise<void>;
+  /** Absolute logical-request deadline (epoch ms). Undefined = no deadline. */
+  readonly deadlineAt?: number;
+  /** Injectable clock for deterministic deadline tests. */
+  readonly now?: () => number;
+}
+
+/** Per-attempt timeout capped to the remaining logical-request budget (>= 1 ms). */
+function effectiveTimeout(timeoutMs: number, deadlineAt: number | undefined, now: () => number): number {
+  if (deadlineAt === undefined) return timeoutMs;
+  return Math.max(1, Math.min(timeoutMs, Math.floor(deadlineAt - now())));
 }
 
 /**
@@ -84,19 +105,36 @@ export interface RunProviderAttemptArgs {
  * bounded retry policy. Returns exactly one ExecuteResult (the final physical
  * attempt), so the caller's fallback/attempt model is unchanged: retries of a
  * candidate collapse into that candidate's single attempt. Total physical calls
- * are deterministically bounded at `maxRetries + 1`.
+ * are deterministically bounded at `maxRetries + 1`. When a logical-request
+ * `deadlineAt` is supplied, no retry starts past the deadline and each attempt's
+ * timeout is capped to the remaining budget (the per-attempt timeout is never
+ * extended).
  */
 export async function runProviderAttempt(args: RunProviderAttemptArgs): Promise<ExecuteResult> {
-  const { adapter, input, attemptIndex, policy } = args;
+  const { adapter, input, attemptIndex, policy, deadlineAt } = args;
   const sleep = args.sleep ?? defaultSleep;
+  const now = args.now ?? Date.now;
 
-  let result = await executeOnceWithTimeout(adapter, input, attemptIndex, policy.timeoutMs);
+  let result = await executeOnceWithTimeout(
+    adapter,
+    input,
+    attemptIndex,
+    effectiveTimeout(policy.timeoutMs, deadlineAt, now),
+  );
   for (let retry = 0; retry < policy.retry.maxRetries; retry++) {
     if (result.kind === "success") break;
     if (!isRetryableErrorClass(result.attempt.errorClass)) break;
+    if (deadlineAt !== undefined && now() >= deadlineAt) break;
     const delay = backoffDelayMs(policy.retry, retry);
-    if (delay > 0) await sleep(delay);
-    result = await executeOnceWithTimeout(adapter, input, attemptIndex, policy.timeoutMs);
+    const capped = deadlineAt === undefined ? delay : Math.min(delay, Math.max(0, deadlineAt - now()));
+    if (capped > 0) await sleep(capped);
+    if (deadlineAt !== undefined && now() >= deadlineAt) break;
+    result = await executeOnceWithTimeout(
+      adapter,
+      input,
+      attemptIndex,
+      effectiveTimeout(policy.timeoutMs, deadlineAt, now),
+    );
   }
   return result;
 }

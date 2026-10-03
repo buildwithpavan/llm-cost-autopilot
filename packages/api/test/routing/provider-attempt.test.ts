@@ -64,9 +64,9 @@ function sequenceAdapter(results: ExecuteResult[]): { adapter: ProviderAdapter; 
   return { adapter, execute };
 }
 
-const NO_RETRY: ProviderAttemptPolicy = { timeoutMs: 1_000, retry: { maxRetries: 0, backoffBaseMs: 0, backoffMaxMs: 0 } };
+const NO_RETRY: ProviderAttemptPolicy = { timeoutMs: 1_000, retry: { maxRetries: 0, backoffBaseMs: 0, backoffMaxMs: 0 }, requestDeadlineMs: 0 };
 function retryPolicy(maxRetries: number): ProviderAttemptPolicy {
-  return { timeoutMs: 1_000, retry: { maxRetries, backoffBaseMs: 10, backoffMaxMs: 100 } };
+  return { timeoutMs: 1_000, retry: { maxRetries, backoffBaseMs: 10, backoffMaxMs: 100 }, requestDeadlineMs: 0 };
 }
 const noSleep = async () => {};
 
@@ -151,7 +151,7 @@ describe("runProviderAttempt — timeout", () => {
           signal.addEventListener("abort", () => { aborted = true; });
         }),
     };
-    const policy: ProviderAttemptPolicy = { timeoutMs: 15, retry: { maxRetries: 0, backoffBaseMs: 0, backoffMaxMs: 0 } };
+    const policy: ProviderAttemptPolicy = { timeoutMs: 15, retry: { maxRetries: 0, backoffBaseMs: 0, backoffMaxMs: 0 }, requestDeadlineMs: 0 };
     const r = await runProviderAttempt({ adapter, input: { ...INPUT }, attemptIndex: 1, policy });
     expect(r.kind).toBe("failure");
     expect(r.attempt.errorClass).toBe("timeout");
@@ -176,7 +176,7 @@ describe("runProviderAttempt — timeout", () => {
         return Promise.resolve(okResult());
       },
     };
-    const policy: ProviderAttemptPolicy = { timeoutMs: 15, retry: { maxRetries: 1, backoffBaseMs: 0, backoffMaxMs: 0 } };
+    const policy: ProviderAttemptPolicy = { timeoutMs: 15, retry: { maxRetries: 1, backoffBaseMs: 0, backoffMaxMs: 0 }, requestDeadlineMs: 0 };
     const r = await runProviderAttempt({ adapter, input: INPUT, attemptIndex: 0, policy, sleep: noSleep });
     expect(r.kind).toBe("success");
     expect(calls).toBe(2);
@@ -194,5 +194,96 @@ describe("runProviderAttempt — timeout", () => {
     expect(r.kind).toBe("failure");
     expect(r.attempt.errorClass).toBe("provider_unavailable");
     expect(execute).toHaveBeenCalledTimes(1); // not retried
+  });
+});
+
+describe("runProviderAttempt — logical-request deadline", () => {
+  function deadlinePolicy(maxRetries: number, timeoutMs: number): ProviderAttemptPolicy {
+    return { timeoutMs, retry: { maxRetries, backoffBaseMs: 1_000, backoffMaxMs: 1_000 }, requestDeadlineMs: 0 };
+  }
+
+  it("caps the per-attempt timeout to the remaining deadline budget", async () => {
+    const seen: number[] = [];
+    const adapter: ProviderAdapter = {
+      providerId: "cap",
+      listModels: () => [],
+      probeHealth: async () => ({ providerId: "cap", healthy: true, lastProbedAt: "", consecutiveFailures: 0 }),
+      execute: (_input, signal) =>
+        new Promise<ExecuteResult>((resolve) => {
+          signal.addEventListener("abort", () => {
+            seen.push(1);
+            resolve(failResult("timeout"));
+          });
+        }),
+    };
+    // deadline leaves only ~20ms even though the per-attempt timeout is 10s.
+    const now = () => 1_000_000;
+    const deadlineAt = 1_000_020;
+    const start = Date.now();
+    const r = await runProviderAttempt({
+      adapter,
+      input: INPUT,
+      attemptIndex: 0,
+      policy: deadlinePolicy(0, 10_000),
+      now,
+      deadlineAt,
+    });
+    const elapsed = Date.now() - start;
+    expect(r.kind).toBe("failure");
+    expect(elapsed).toBeLessThan(1_000); // bounded by the ~20ms deadline, not 10s
+  });
+
+  it("skips the backoff sleep and retry when the deadline falls within the backoff window", async () => {
+    const { adapter, execute } = sequenceAdapter([failResult("upstream_5xx"), okResult()]);
+    const sleep = vi.fn(async () => {});
+    // After the first attempt the clock is already at/after the deadline.
+    const deadlineAt = 1_000_000;
+    let step = 0;
+    const now = () => (step++ === 0 ? 999_000 : 1_000_000);
+    const r = await runProviderAttempt({
+      adapter,
+      input: INPUT,
+      attemptIndex: 0,
+      policy: { timeoutMs: 1_000, retry: { maxRetries: 3, backoffBaseMs: 10, backoffMaxMs: 10 }, requestDeadlineMs: 0 },
+      now,
+      deadlineAt,
+      sleep,
+    });
+    expect(r.kind).toBe("failure");
+    expect(execute).toHaveBeenCalledTimes(1); // no retry
+    expect(sleep).not.toHaveBeenCalled(); // backoff skipped
+  });
+
+  it("stops retrying when the deadline is reached and returns the last failure", async () => {
+    const { adapter, execute } = sequenceAdapter([
+      failResult("upstream_5xx"),
+      failResult("upstream_5xx"),
+      okResult(),
+    ]);
+    let calls = 0;
+    // Clock passes the deadline right after the first physical attempt.
+    const deadlineAt = 1_000_000;
+    const now = () => {
+      calls += 1;
+      return calls <= 1 ? 999_000 : 1_000_001;
+    };
+    const r = await runProviderAttempt({
+      adapter,
+      input: INPUT,
+      attemptIndex: 0,
+      policy: { timeoutMs: 1_000, retry: { maxRetries: 3, backoffBaseMs: 10, backoffMaxMs: 10 }, requestDeadlineMs: 0 },
+      now,
+      deadlineAt,
+      sleep: noSleep,
+    });
+    expect(r.kind).toBe("failure");
+    expect(execute).toHaveBeenCalledTimes(1); // deadline prevented any retry
+  });
+
+  it("behaves identically to the unbounded path when no deadline is supplied", async () => {
+    const { adapter, execute } = sequenceAdapter([failResult("upstream_5xx"), okResult()]);
+    const r = await runProviderAttempt({ adapter, input: INPUT, attemptIndex: 0, policy: retryPolicy(2), sleep: noSleep });
+    expect(r.kind).toBe("success");
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 });

@@ -17,6 +17,9 @@ const baseEnvSchema = z.object({
   LCA_PROVIDER_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(0),
   LCA_PROVIDER_RETRY_BACKOFF_MS: z.coerce.number().int().min(0).max(60_000).default(100),
   LCA_PROVIDER_RETRY_BACKOFF_MAX_MS: z.coerce.number().int().min(0).max(120_000).default(2_000),
+  // Phase 14: optional logical-request deadline bounding TOTAL provider-execution
+  // wall time across retries + fallback. 0 = disabled (preserves prior behavior).
+  LCA_REQUEST_DEADLINE_MS: z.coerce.number().int().min(0).max(1_200_000).default(0),
   // Provider reliability (Phase 9). Process-local circuit breaker / cooldown.
   LCA_CIRCUIT_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
   LCA_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().positive().max(100).default(5),
