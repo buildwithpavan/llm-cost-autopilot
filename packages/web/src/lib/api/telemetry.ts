@@ -90,3 +90,53 @@ export function getTelemetrySummary(opts: SummaryOptions = {}): Promise<Telemetr
   if (opts.signal) reqOpts.signal = opts.signal;
   return apiRequest<TelemetrySummaryResponse>(path, reqOpts);
 }
+
+export type TimeseriesBucket = "hour" | "day";
+
+/** One contiguous, zero-filled time bucket. Monetary fields are exact decimal strings. */
+export interface TimeseriesBucketPoint {
+  bucketStart: string;
+  requestCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostUsd: string;
+  actualCostUsd: string;
+  pendingActualCostCount: number;
+  reconciledCount: number;
+}
+
+export interface TimeseriesResponse {
+  window: { since: string; until: string };
+  bucket: TimeseriesBucket;
+  buckets: TimeseriesBucketPoint[];
+}
+
+export interface TimeseriesOptions {
+  since?: string;
+  until?: string;
+  bucket?: TimeseriesBucket;
+  clientId?: string;
+  providerId?: string;
+  modelId?: string;
+  apiKey?: string;
+  signal?: AbortSignal;
+}
+
+// Mirrors GET /v1/telemetry/timeseries (since/until/bucket/clientId/providerId/modelId).
+// Monetary values are kept as decimal strings verbatim — never parsed to Number here.
+export function getTelemetryTimeseries(opts: TimeseriesOptions = {}): Promise<TimeseriesResponse> {
+  const q = new URLSearchParams();
+  if (opts.since) q.set("since", opts.since);
+  if (opts.until) q.set("until", opts.until);
+  if (opts.bucket) q.set("bucket", opts.bucket);
+  if (opts.clientId) q.set("clientId", opts.clientId);
+  if (opts.providerId) q.set("providerId", opts.providerId);
+  if (opts.modelId) q.set("modelId", opts.modelId);
+  const search = q.toString();
+  const path = `/v1/telemetry/timeseries${search ? `?${search}` : ""}`;
+  const reqOpts: { apiKey?: string; signal?: AbortSignal } = {};
+  if (opts.apiKey) reqOpts.apiKey = opts.apiKey;
+  if (opts.signal) reqOpts.signal = opts.signal;
+  return apiRequest<TimeseriesResponse>(path, reqOpts);
+}
+

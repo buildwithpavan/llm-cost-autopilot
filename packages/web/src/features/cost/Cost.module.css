@@ -546,3 +546,260 @@
   overflow-wrap: anywhere;
 }
 
+/* Cost & Usage Trend chart ------------------------------------------------ */
+.segGroup {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-tab);
+}
+
+.segBtn,
+.segBtnActive {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--r-mini);
+  cursor: pointer;
+}
+
+.segBtn:hover {
+  color: var(--text-secondary);
+}
+
+.segBtnActive {
+  background: var(--bg-tab-active);
+  color: var(--text-primary);
+}
+
+.segBtn:focus-visible,
+.segBtnActive:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.chartSkel {
+  height: 232px;
+  margin: 16px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--bg-card), var(--bg-inset), var(--bg-card));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+.chartWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+.detailStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  min-height: 20px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.detailTime {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.detailItem {
+  font-variant-numeric: tabular-nums;
+}
+
+.detailHint {
+  color: var(--text-tertiary);
+}
+
+.chartBody {
+  display: flex;
+  gap: 10px;
+  height: 180px;
+}
+
+.yAxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  width: 56px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.bars {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  border-left: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+  padding: 0 1px;
+}
+
+.col,
+.colActive {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  cursor: pointer;
+}
+
+.colTrack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.colActive .colTrack {
+  background: var(--bg-highlight);
+}
+
+.col:focus-visible,
+.colActive:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.fillEstimated,
+.fillRequests,
+.fillTokIn,
+.fillTokOut {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 2px 2px 0 0;
+  min-height: 1px;
+}
+
+.fillEstimated {
+  background: var(--accent-primary);
+}
+
+.fillRequests {
+  background: var(--accent-cyan);
+}
+
+.fillTokIn {
+  background: var(--accent-purple);
+  border-radius: 0;
+}
+
+.fillTokOut {
+  background: var(--accent-blue);
+}
+
+.actualMarker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--success);
+}
+
+.pendingTick {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.xAxis {
+  display: flex;
+  gap: 2px;
+  padding-left: 66px;
+}
+
+.xTick {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 9px;
+  color: var(--text-tertiary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.swEstimated {
+  background: var(--accent-primary);
+}
+.swActual {
+  background: var(--success);
+}
+.swPending {
+  background: var(--warn);
+  border-radius: 50%;
+}
+.swRequests {
+  background: var(--accent-cyan);
+}
+.swTokIn {
+  background: var(--accent-purple);
+}
+.swTokOut {
+  background: var(--accent-blue);
+}
+
+@media (max-width: 640px) {
+  .yAxis {
+    width: 42px;
+  }
+  .xAxis {
+    padding-left: 52px;
+  }
+  .chartBody {
+    height: 150px;
+  }
+}
+
+

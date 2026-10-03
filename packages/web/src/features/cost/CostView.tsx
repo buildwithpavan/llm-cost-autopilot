@@ -14,6 +14,7 @@ import type { CatalogResponse } from "../../lib/api/catalog.js";
 import type { BudgetStatusResponse, BudgetDecisionsResponse, BudgetDecisionRecord } from "../../lib/api/budgets.js";
 import type { Async } from "../overview/overview-model.js";
 import { useCostData, type CostRange } from "./useCostData.js";
+import { CostTrendPanel } from "./CostTrendPanel.js";
 import {
   deriveReconciliationSummary,
   formatMicroUsd,
@@ -47,7 +48,7 @@ function usd(micro: number): string {
 
 export function CostView() {
   const env = useMemo(() => getEnvironment(), []);
-  const { range, setRange, providerId, setProviderId, modelId, setModelId, window, summary, events, metrics, catalog, budgets, budgetDecisions } =
+  const { range, setRange, providerId, setProviderId, modelId, setModelId, window, summary, events, metrics, catalog, budgets, budgetDecisions, timeseries } =
     useCostData();
 
   const summaryReady = summary.status === "ready" ? summary.data : null;
@@ -177,6 +178,9 @@ export function CostView() {
 
         {/* Budget guardrails --------------------------------------------- */}
         <BudgetPanel section={budgets} />
+
+        {/* Cost & usage time-series trend (independent async source) ------ */}
+        <CostTrendPanel section={timeseries} />
 
         {/* Recent budget decisions (audit) ------------------------------- */}
         <BudgetDecisionsPanel section={budgetDecisions} rangeLabel={window.label} />

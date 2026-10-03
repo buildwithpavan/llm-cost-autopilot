@@ -5,13 +5,16 @@ import type { TelemetryEvent } from "../../types/index.js";
 import {
   getTelemetrySummary,
   listTelemetryEvents,
+  getTelemetryTimeseries,
   type TelemetrySummaryResponse,
+  type TimeseriesResponse,
 } from "../../lib/api/telemetry.js";
 import { getCatalog, type CatalogResponse } from "../../lib/api/catalog.js";
 import { getReconciliationMetrics, type ReconciliationMetrics } from "../../lib/api/metrics.js";
 import { getBudgetStatus, getBudgetDecisions, type BudgetStatusResponse, type BudgetDecisionsResponse } from "../../lib/api/budgets.js";
 import { getEnvironment } from "../../lib/env.js";
 import type { Async } from "../overview/overview-model.js";
+import { bucketForRange } from "./timeseries-model.js";
 
 export type CostRange = "24h" | "7d" | "30d";
 
@@ -52,6 +55,7 @@ export interface UseCostDataResult {
   catalog: Async<CatalogResponse>;
   budgets: Async<BudgetStatusResponse>;
   budgetDecisions: Async<BudgetDecisionsResponse>;
+  timeseries: Async<TimeseriesResponse>;
   refresh: () => void;
 }
 
@@ -80,6 +84,8 @@ export function useCostData(): UseCostDataResult {
   const reqId = useRef(0);
   const budgetReqId = useRef(0);
   const budgetDecReqId = useRef(0);
+  const [timeseries, setTimeseries] = useState<Async<TimeseriesResponse>>({ status: "loading" });
+  const seriesReqId = useRef(0);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -202,6 +208,37 @@ export function useCostData(): UseCostDataResult {
     return () => ctrl.abort();
   }, [env, range, tick]);
 
+  // Time-series trend for the "Cost & Usage Trend" panel. Independent source:
+  // its own request id + state so it never blocks (and is never blocked by) the
+  // summary/events/budget sources. Keyed on the selected range + provider/model
+  // filters; bucket is derived deterministically from the range.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const { signal } = ctrl;
+    const id = ++seriesReqId.current;
+    const until = new Date();
+    const since = new Date(until.getTime() - RANGE_MS[range]);
+    const bucket = bucketForRange(range);
+    setTimeseries({ status: "loading" });
+    getTelemetryTimeseries({
+      since: since.toISOString(),
+      until: until.toISOString(),
+      bucket,
+      ...(providerId ? { providerId } : {}),
+      ...(modelId ? { modelId } : {}),
+      ...(env.apiKey ? { apiKey: env.apiKey } : {}),
+      signal,
+    })
+      .then((data) => {
+        if (id === seriesReqId.current) setTimeseries({ status: "ready", data });
+      })
+      .catch((err) => {
+        if (!signal.aborted && id === seriesReqId.current)
+          setTimeseries({ status: "error", message: errMessage(err, "Trend unavailable") });
+      });
+    return () => ctrl.abort();
+  }, [env, range, providerId, modelId, tick]);
+
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   return {
@@ -218,6 +255,7 @@ export function useCostData(): UseCostDataResult {
     catalog,
     budgets,
     budgetDecisions,
+    timeseries,
     refresh,
   };
 }
