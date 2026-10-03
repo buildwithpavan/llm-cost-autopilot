@@ -86,7 +86,7 @@ function rowToEvent(r: Row): TelemetryEvent {
 }
 
 export async function queryEvents(db: Db, opts: QueryOptions = {}): Promise<QueryPage> {
-  const limit = Math.max(1, Math.min(500, opts.limit ?? 100));
+  const limit = Number.isFinite(opts.limit) ? Math.max(1, Math.min(500, Math.floor(opts.limit as number))) : 100;
   let q = db.selectFrom("telemetry_events").selectAll();
   if (opts.clientId) q = q.where("client_id", "=", opts.clientId);
   if (opts.providerId) q = q.where("effective_provider_id", "=", opts.providerId);

@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { queryBudgetDecisions } from "@lca/persistence";
 
 import type { AppContext } from "../wiring.js";
+import { parseIsoDateParam, parseLimitParam } from "./query-params.js";
 
 /**
  * Operator-facing audit read for budget decisions (warned/blocked). Additive and
@@ -14,9 +15,9 @@ const plugin: FastifyPluginAsync<AppContext> = async (fastify, deps) => {
     const q = req.query as Record<string, string | undefined>;
     const filters: Parameters<typeof queryBudgetDecisions>[1] = {};
     if (q["clientId"]) filters.clientId = q["clientId"];
-    if (q["since"]) filters.since = q["since"];
-    if (q["until"]) filters.until = q["until"];
-    if (q["limit"]) filters.limit = Number(q["limit"]);
+    if (q["since"]) filters.since = parseIsoDateParam(q["since"], "since").toISOString();
+    if (q["until"]) filters.until = parseIsoDateParam(q["until"], "until").toISOString();
+    if (q["limit"]) filters.limit = parseLimitParam(q["limit"]);
     const decisions = await queryBudgetDecisions(deps.db, filters);
     return reply.status(200).send({ decisions });
   });

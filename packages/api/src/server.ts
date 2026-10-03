@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { URL } from "node:url";
 
 import Fastify, { type FastifyInstance } from "fastify";
+import helmet from "@fastify/helmet";
 
 import type { Db, OperatorRuleStore, BudgetStore, TelemetryWriter } from "@lca/persistence";
 import type { ProviderRegistry } from "@lca/providers";
@@ -48,6 +50,21 @@ export interface ServerDeps {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Loopback-only origins the development CORS hook will reflect (never arbitrary origins). */
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname === "[::1]"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   const metrics = deps.metrics ?? getSharedMetrics();
 
@@ -70,13 +87,35 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
 
   app.setErrorHandler(errorHandler);
 
-  // Permissive CORS for development. Production deploys should front the API
-  // with a gateway that enforces origin allowlisting.
+  // Security response headers. The API serves only JSON/SSE (never HTML), so the
+  // CSP is locked down fully; cross-origin resource policy is relaxed because the
+  // separate-origin dashboard reads these responses via CORS.
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    frameguard: { action: "deny" },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  });
+
+  // Permissive CORS for local development only. Reflection is restricted to
+  // loopback origins so that, even if NODE_ENV is accidentally left unset, the
+  // API never reflects an arbitrary external origin with credentials. Production
+  // deploys front the API with a gateway that enforces an origin allowlist.
   const corsAllow = deps.config.NODE_ENV !== "production";
   if (corsAllow) {
+    app.log.warn(
+      "non-production mode: loopback-only dev CORS and dev-only routes are enabled; set NODE_ENV=production for deployments",
+    );
     app.addHook("onRequest", async (req, reply) => {
       const origin = req.headers.origin;
-      if (origin) {
+      if (origin && isLoopbackOrigin(origin)) {
         reply.header("access-control-allow-origin", origin);
         reply.header("access-control-allow-credentials", "true");
         reply.header("access-control-allow-headers", "authorization, content-type, x-request-id");

@@ -59,7 +59,7 @@ export async function queryBudgetDecisions(
   db: Db,
   filters: BudgetDecisionFilters = {},
 ): Promise<BudgetDecisionRecord[]> {
-  const limit = Math.max(1, Math.min(500, filters.limit ?? 100));
+  const limit = Number.isFinite(filters.limit) ? Math.max(1, Math.min(500, Math.floor(filters.limit as number))) : 100;
   let q = db.selectFrom("budget_decisions").selectAll();
   if (filters.clientId) q = q.where("client_id", "=", filters.clientId);
   if (filters.since) q = q.where("decided_at", ">=", new Date(filters.since));

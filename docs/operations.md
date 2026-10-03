@@ -10,16 +10,17 @@ Concrete playbooks for running the backend in dev, staging, and production. This
 4. [Cost anomaly detection](#cost-anomaly-detection)
 5. [Cost optimization insights](#cost-optimization-insights)
 6. [Deployment shape](#deployment-shape)
-7. [Database migrations](#database-migrations)
-8. [Pricing snapshots](#pricing-snapshots)
-9. [Provider registration and health](#provider-registration-and-health)
-10. [Operator rules](#operator-rules)
-11. [API keys](#api-keys)
-12. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
-13. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
-14. [Observability endpoints](#observability-endpoints)
-15. [Backup and restore](#backup-and-restore)
-16. [Incident playbooks](#incident-playbooks)
+7. [HTTP security hardening](#http-security-hardening)
+8. [Database migrations](#database-migrations)
+9. [Pricing snapshots](#pricing-snapshots)
+10. [Provider registration and health](#provider-registration-and-health)
+11. [Operator rules](#operator-rules)
+12. [API keys](#api-keys)
+13. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
+14. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
+15. [Observability endpoints](#observability-endpoints)
+16. [Backup and restore](#backup-and-restore)
+17. [Incident playbooks](#incident-playbooks)
 
 ---
 
@@ -31,7 +32,7 @@ Configuration is loaded by [packages/api/src/config.ts](../packages/api/src/conf
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string. |
 | `PORT` | no (8080) | HTTP port. |
-| `NODE_ENV` | no (`development`) | Set to `production` in production. When not `production`, the API enables permissive dev CORS and registers the dev-only `POST /v1/dev/mock/arm-failure` route. The Docker image sets it to `production`. |
+| `NODE_ENV` | no (`development`) | Set to `production` in production. When not `production`, the API enables **loopback-only** dev CORS (reflects only `localhost`/`127.0.0.1`/`::1` origins, never arbitrary origins) and registers the dev-only `POST /v1/dev/mock/arm-failure` route, and logs a startup warning. The Docker image sets it to `production`. |
 | `LCA_LOG_LEVEL` | no (`info`) | pino level: `fatal|error|warn|info|debug|trace`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | no | When set, enables OpenTelemetry OTLP HTTP trace export. |
 | `OTEL_SERVICE_NAME` | no (`lca-api`) | Trace service name. |
@@ -169,6 +170,16 @@ For local development use [docker/docker-compose.dev.yml](../docker/docker-compo
 The MVP is single-tenant and single-node per deployment. Horizontal scaling is possible for the request path — telemetry writes are batched but not queued, and retention runs in-process under a Postgres advisory lock, so multiple replicas coexist safely. There is no support for tenant isolation today.
 
 On `SIGINT`/`SIGTERM` the API shuts down gracefully: it stops the retention, health-probe, and reconciliation schedulers, flushes the batched telemetry writer, then closes the HTTP server and database pool and exits 0.
+
+## HTTP security hardening
+
+The API serves only JSON and Server-Sent Events (never HTML). Hardening is applied in [packages/api/src/server.ts](../packages/api/src/server.ts):
+
+- **Security headers** — every response carries a hardened set via `@fastify/helmet`: a locked-down `Content-Security-Policy` (`default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, HSTS (effective only over HTTPS), and `Cross-Origin-Resource-Policy: cross-origin` (so the separate-origin dashboard can read responses via CORS). No framework banner is advertised.
+- **CORS** — permissive CORS exists for **local development only** and is gated on `NODE_ENV !== "production"`. Even then it reflects **only loopback origins** (`localhost`/`127.0.0.1`/`::1`); an arbitrary external origin is never reflected and never receives `access-control-allow-credentials`. In production, set `NODE_ENV=production` (the Docker image does) and front the API with a gateway that enforces an origin allowlist. A startup warning is logged whenever the process runs in non-production mode.
+- **Request-body limit** — the Fastify default 1 MiB body limit applies to all `POST`/`PATCH` routes.
+- **Input validation** — bounded recent-window reads (`/v1/telemetry/*`) reject malformed `limit`, `since`/`until`, and `fromDate`/`toDate` query values deterministically with `400 invalid_request` (never an opaque 500); the 30-day maximum window is unchanged. Pagination `limit` must be a positive integer; large values are capped (max 500) rather than rejected.
+- **Authentication** — all business routes require a Bearer API key (Argon2id-hashed at rest); only `/v1/health` and `/metrics` are public. Errors never include stack traces or secrets, and the Authorization / `x-api-key` headers are redacted from logs.
 
 ## Database migrations
 
