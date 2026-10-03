@@ -11,16 +11,17 @@ Concrete playbooks for running the backend in dev, staging, and production. This
 5. [Cost optimization insights](#cost-optimization-insights)
 6. [Deployment shape](#deployment-shape)
 7. [HTTP security hardening](#http-security-hardening)
-8. [Database migrations](#database-migrations)
-9. [Pricing snapshots](#pricing-snapshots)
-10. [Provider registration and health](#provider-registration-and-health)
-11. [Operator rules](#operator-rules)
-12. [API keys](#api-keys)
-13. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
-14. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
-15. [Observability endpoints](#observability-endpoints)
-16. [Backup and restore](#backup-and-restore)
-17. [Incident playbooks](#incident-playbooks)
+8. [Performance and benchmarks](#performance-and-benchmarks)
+9. [Database migrations](#database-migrations)
+10. [Pricing snapshots](#pricing-snapshots)
+11. [Provider registration and health](#provider-registration-and-health)
+12. [Operator rules](#operator-rules)
+13. [API keys](#api-keys)
+14. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
+15. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
+16. [Observability endpoints](#observability-endpoints)
+17. [Backup and restore](#backup-and-restore)
+18. [Incident playbooks](#incident-playbooks)
 
 ---
 
@@ -180,6 +181,16 @@ The API serves only JSON and Server-Sent Events (never HTML). Hardening is appli
 - **Request-body limit** — the Fastify default 1 MiB body limit applies to all `POST`/`PATCH` routes.
 - **Input validation** — bounded recent-window reads (`/v1/telemetry/*`) reject malformed `limit`, `since`/`until`, and `fromDate`/`toDate` query values deterministically with `400 invalid_request` (never an opaque 500); the 30-day maximum window is unchanged. Pagination `limit` must be a positive integer; large values are capped (max 500) rather than rejected.
 - **Authentication** — all business routes require a Bearer API key (Argon2id-hashed at rest); only `/v1/health` and `/metrics` are public. Errors never include stack traces or secrets, and the Authorization / `x-api-key` headers are redacted from logs.
+
+## Performance and benchmarks
+
+Measured characteristics (local observations — not capacity guarantees; absolute numbers depend on hardware, cache state, and table size):
+
+- **Core request overhead** is dominated by provider latency, not the engine. The whole in-memory core path (resolve → estimate → route → fallback orchestration → build event → redact) is ~0.15 ms; redaction (~0.08 ms) is the heaviest core step. Governance rule resolution is strictly **O(rules)** and linear — ~0.0004 ms at 10 rules, ~0.027 ms at 1000 rules — so realistic operator-rule counts are never the bottleneck. Measure with `npm run bench:overhead`.
+- **Telemetry reads.** Full-window aggregations (`/v1/telemetry/summary`, `/timeseries`) must read every matching row in the window and therefore scale linearly with event volume in the (bounded) 30-day window — for example ~70 ms (summary, no filter) over ~50k events locally. Client- or provider/model-filtered reads use the `telemetry_events (client_id, received_at DESC)` / `(effective_provider_id, effective_model_id, received_at DESC)` indexes and stay well under that. For long-range trend reporting prefer the pre-aggregated `telemetry_rollups`. Measure with `DATABASE_URL=… npm run bench:query`.
+- **Recent-events pagination index.** The `/v1/telemetry/events` read without a client/provider/model filter (dashboard "recent requests", replay list) orders by `received_at DESC, event_id DESC LIMIT n`. Migration `1760000000000_telemetry_events_time_index.sql` adds `telemetry_events_received_at (received_at DESC, event_id DESC)`; without it the planner falls back to a full-window parallel seq scan + top-N sort (measured ~22.7 ms at 150k events), with it the query is an index range scan that stops at the limit (~2.6 ms). The index keys are append-time monotonic, so write overhead is a right-edge B-tree insert. On a very large existing `telemetry_events`, create the equivalent index `CONCURRENTLY` out of band before the ordinary migration runs.
+- **Connection pool.** The Postgres pool is created with `max: 20` and `idleTimeoutMillis: 30000` ([packages/persistence/src/db/schema.ts](../packages/persistence/src/db/schema.ts)). The completion path never holds a DB connection across the provider network call, and telemetry writes are batched asynchronously (they do not block the response), so pool connections are acquired and released per short query. Size the pool against `DB max_connections ÷ replica count`.
+- **Load smoke test.** `DATABASE_URL=… npm run bench:throughput` drives in-process `/v1/completions` against a mock provider (short phases by default; `RUN_LOAD=1` for 60 s phases) and asserts zero non-2xx and ≤ 1 MB/request memory growth. These benchmarks are **not** part of the ordinary test suite and have no wall-clock thresholds in it.
 
 ## Database migrations
 

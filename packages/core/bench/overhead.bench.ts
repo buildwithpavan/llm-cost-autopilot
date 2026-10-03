@@ -180,3 +180,39 @@ describe("core completion path overhead (SC-007, core only)", () => {
   });
 });
 
+// Governance rule-resolution scaling (Phase 17). Proves resolveOverride is O(rules)
+// and bounded as operator-rule counts grow. Rules target distinct client ids so the
+// request matches at most one — worst case where every rule's predicate is evaluated.
+function mkRules(n: number): OperatorRule[] {
+  const rules: OperatorRule[] = [];
+  for (let i = 0; i < n; i++) {
+    rules.push({
+      ruleId: `rule_${String(i).padStart(6, "0")}`,
+      priority: i,
+      match: { clientIds: [`client-${i}`], requiredCapabilities: null, minEstimatedTokens: null, maxEstimatedTokens: null },
+      pin: { providerId: "fast", modelId: "fast:default" },
+      enabled: true,
+      createdAt: "2026-09-08T00:00:00.000Z",
+      updatedAt: "2026-09-08T00:00:00.000Z",
+    });
+  }
+  return rules;
+}
+
+describe("governance resolution scaling (Phase 17)", () => {
+  const request = mkRequest();
+  const rules10 = mkRules(10);
+  const rules100 = mkRules(100);
+  const rules1000 = mkRules(1000);
+
+  bench("resolveOverride over 10 rules (no match)", () => {
+    resolveOverride({ request, rules: rules10 });
+  });
+  bench("resolveOverride over 100 rules (no match)", () => {
+    resolveOverride({ request, rules: rules100 });
+  });
+  bench("resolveOverride over 1000 rules (no match)", () => {
+    resolveOverride({ request, rules: rules1000 });
+  });
+});
+
