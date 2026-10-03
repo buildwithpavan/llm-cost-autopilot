@@ -154,3 +154,38 @@ describe("cost anomaly config (Phase 12)", () => {
   });
 });
 
+describe("cost optimization insights config (Phase 15)", () => {
+  it("applies deterministic advisory defaults", () => {
+    const c = loadConfig(BASE);
+    expect(c.LCA_OPT_CONCENTRATION_RATIO).toBe("0.40");
+    expect(c.LCA_OPT_MIN_SPEND_USD).toBe("0.010000");
+    expect(c.LCA_OPT_BUDGET_PRESSURE_RATIO).toBe("0.80");
+    expect(c.LCA_OPT_PRICING_MIN_DELTA_USD).toBe("0.010000");
+    expect(c.LCA_OPT_MAX_PRICING_ALTERNATIVES).toBe(1);
+  });
+
+  it("accepts valid overrides", () => {
+    const c = loadConfig({
+      ...BASE,
+      LCA_OPT_CONCENTRATION_RATIO: "0.65",
+      LCA_OPT_MIN_SPEND_USD: "1.000000",
+      LCA_OPT_BUDGET_PRESSURE_RATIO: "0.90",
+      LCA_OPT_PRICING_MIN_DELTA_USD: "0.050000",
+      LCA_OPT_MAX_PRICING_ALTERNATIVES: "3",
+    });
+    expect(c.LCA_OPT_CONCENTRATION_RATIO).toBe("0.65");
+    expect(c.LCA_OPT_MIN_SPEND_USD).toBe("1.000000");
+    expect(c.LCA_OPT_BUDGET_PRESSURE_RATIO).toBe("0.90");
+    expect(c.LCA_OPT_PRICING_MIN_DELTA_USD).toBe("0.050000");
+    expect(c.LCA_OPT_MAX_PRICING_ALTERNATIVES).toBe(3);
+  });
+
+  it("rejects non-decimal thresholds and out-of-bound alternative counts", () => {
+    expect(() => loadConfig({ ...BASE, LCA_OPT_CONCENTRATION_RATIO: "abc" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_OPT_MIN_SPEND_USD: "-0.1" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_OPT_MAX_PRICING_ALTERNATIVES: "-1" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_OPT_MAX_PRICING_ALTERNATIVES: "11" })).toThrow();
+    expect(() => loadConfig({ ...BASE, LCA_OPT_MAX_PRICING_ALTERNATIVES: "1.5" })).toThrow();
+  });
+});
+

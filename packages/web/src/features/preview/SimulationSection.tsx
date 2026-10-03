@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { FlaskConical, AlertTriangle, ArrowRight, ShieldCheck } from "lucide-react";
 
 import { decisionSourceMeta } from "../routing-explorer/event-presenters.js";
@@ -9,6 +10,7 @@ import {
   buildSimulateBody,
   emptySimulationForm,
   hasSimulationErrors,
+  simulationSeedFromParams,
   toggleFormCapability,
   validateSimulationForm,
   type SimulationFormErrors,
@@ -19,7 +21,10 @@ import styles from "./Preview.module.css";
 
 export function SimulationSection() {
   const { state, run } = useSimulation();
-  const [form, setForm] = useState<SimulationFormState>(() => emptySimulationForm());
+  const searchParams = useSearchParams();
+  const [form, setForm] = useState<SimulationFormState>(() =>
+    emptySimulationForm(simulationSeedFromParams(searchParams)),
+  );
   const [errors, setErrors] = useState<SimulationFormErrors>({});
 
   const submitting = state.status === "loading";

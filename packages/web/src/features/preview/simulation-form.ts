@@ -23,7 +23,7 @@ export interface SimulationFormErrors {
   maxTokens?: string;
 }
 
-export function emptySimulationForm(): SimulationFormState {
+export function emptySimulationForm(seed?: Partial<SimulationFormState>): SimulationFormState {
   return {
     prompt: "",
     requestCapabilities: [],
@@ -35,7 +35,24 @@ export function emptySimulationForm(): SimulationFormState {
     matchCapabilities: [],
     minTokens: "",
     maxTokens: "",
+    ...seed,
   };
+}
+
+/**
+ * Extract an optional pin prefill from URL search params (advisory deep-link
+ * from a cost-optimization insight). Pure; only seeds the proposed-rule pin —
+ * it never submits, saves, or changes routing.
+ */
+export function simulationSeedFromParams(params: {
+  get(name: string): string | null;
+}): Partial<SimulationFormState> {
+  const seed: Partial<SimulationFormState> = {};
+  const provider = params.get("pinProviderId");
+  const model = params.get("pinModelId");
+  if (provider && provider.trim()) seed.pinProviderId = provider.trim();
+  if (model && model.trim()) seed.pinModelId = model.trim();
+  return seed;
 }
 
 function isInt(s: string): boolean {

@@ -25,6 +25,7 @@ import telemetryEventsRoute from "./routes/telemetry-events.js";
 import telemetrySummaryRoute from "./routes/telemetry-summary.js";
 import telemetryTimeseriesRoute from "./routes/telemetry-timeseries.js";
 import telemetryAnomaliesRoute from "./routes/telemetry-anomalies.js";
+import telemetryOptimizationRoute from "./routes/telemetry-optimization.js";
 import telemetryRollupsRoute from "./routes/telemetry-rollups.js";
 import telemetryReplayRoute from "./routes/telemetry-replay.js";
 import telemetryBudgetDecisionsRoute from "./routes/telemetry-budget-decisions.js";
@@ -149,6 +150,19 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       criticalRelThreshold: String(deps.config.LCA_ANOMALY_CRIT_REL_THRESHOLD),
       minAbsoluteUsd: deps.config.LCA_ANOMALY_MIN_ABS_USD,
     },
+  });
+  await app.register(telemetryOptimizationRoute, {
+    db: deps.db,
+    registry: deps.registry,
+    optimizationConfig: {
+      concentrationRatioThreshold: deps.config.LCA_OPT_CONCENTRATION_RATIO,
+      minSpendUsd: deps.config.LCA_OPT_MIN_SPEND_USD,
+      budgetPressureRatioThreshold: deps.config.LCA_OPT_BUDGET_PRESSURE_RATIO,
+      pricingComparisonMinDeltaUsd: deps.config.LCA_OPT_PRICING_MIN_DELTA_USD,
+      maxPricingAlternatives: deps.config.LCA_OPT_MAX_PRICING_ALTERNATIVES,
+    },
+    ...(deps.ruleStore ? { ruleStore: deps.ruleStore } : {}),
+    ...(deps.budgetStore ? { budgetStore: deps.budgetStore } : {}),
   });
   await app.register(telemetryRollupsRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryReplayRoute, { db: deps.db, registry: deps.registry });

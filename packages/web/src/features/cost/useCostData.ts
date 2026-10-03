@@ -7,9 +7,11 @@ import {
   listTelemetryEvents,
   getTelemetryTimeseries,
   getTelemetryAnomalies,
+  getOptimizationInsights,
   type TelemetrySummaryResponse,
   type TimeseriesResponse,
   type AnomaliesResponse,
+  type OptimizationInsightsResponse,
 } from "../../lib/api/telemetry.js";
 import { getCatalog, type CatalogResponse } from "../../lib/api/catalog.js";
 import { getReconciliationMetrics, type ReconciliationMetrics } from "../../lib/api/metrics.js";
@@ -59,6 +61,7 @@ export interface UseCostDataResult {
   budgetDecisions: Async<BudgetDecisionsResponse>;
   timeseries: Async<TimeseriesResponse>;
   anomalies: Async<AnomaliesResponse>;
+  insights: Async<OptimizationInsightsResponse>;
   refresh: () => void;
 }
 
@@ -91,6 +94,8 @@ export function useCostData(): UseCostDataResult {
   const seriesReqId = useRef(0);
   const [anomalies, setAnomalies] = useState<Async<AnomaliesResponse>>({ status: "loading" });
   const anomalyReqId = useRef(0);
+  const [insights, setInsights] = useState<Async<OptimizationInsightsResponse>>({ status: "loading" });
+  const insightsReqId = useRef(0);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -274,6 +279,35 @@ export function useCostData(): UseCostDataResult {
     return () => ctrl.abort();
   }, [env, range, providerId, modelId, tick]);
 
+  // Cost optimization insights for the advisory "Cost Optimization Insights"
+  // panel. Fully independent source (own request id + state + catch), keyed on
+  // the same range + provider/model filters. Advisory only — never mutates
+  // routing, governance, or budgets.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const { signal } = ctrl;
+    const id = ++insightsReqId.current;
+    const until = new Date();
+    const since = new Date(until.getTime() - RANGE_MS[range]);
+    setInsights({ status: "loading" });
+    getOptimizationInsights({
+      since: since.toISOString(),
+      until: until.toISOString(),
+      ...(providerId ? { providerId } : {}),
+      ...(modelId ? { modelId } : {}),
+      ...(env.apiKey ? { apiKey: env.apiKey } : {}),
+      signal,
+    })
+      .then((data) => {
+        if (id === insightsReqId.current) setInsights({ status: "ready", data });
+      })
+      .catch((err) => {
+        if (!signal.aborted && id === insightsReqId.current)
+          setInsights({ status: "error", message: errMessage(err, "Optimization insights unavailable") });
+      });
+    return () => ctrl.abort();
+  }, [env, range, providerId, modelId, tick]);
+
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   return {
@@ -292,6 +326,7 @@ export function useCostData(): UseCostDataResult {
     budgetDecisions,
     timeseries,
     anomalies,
+    insights,
     refresh,
   };
 }

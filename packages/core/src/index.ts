@@ -6,4 +6,5 @@ export * as routing from "./routing/index.js";
 export * as telemetry from "./telemetry/index.js";
 export * as overrides from "./overrides/index.js";
 export * as budgets from "./budgets/index.js";
+export * as insights from "./insights/index.js";
 export const CORE_VERSION = "0.1.0";

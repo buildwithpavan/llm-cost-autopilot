@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, FlaskConical, Info } from "lucide-react";
 
@@ -182,7 +182,9 @@ export function PreviewView() {
           <PreviewResult decision={state.decision} />
         ) : null}
 
-        <SimulationSection />
+        <Suspense>
+          <SimulationSection />
+        </Suspense>
       </div>
     </AppShell>
   );

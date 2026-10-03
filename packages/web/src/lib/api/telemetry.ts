@@ -197,3 +197,111 @@ export function getTelemetryAnomalies(opts: AnomaliesOptions = {}): Promise<Anom
   return apiRequest<AnomaliesResponse>(path, reqOpts);
 }
 
+// ---- Cost optimization insights (Phase 15, advisory) ----------------------
+
+export type InsightType = "cost_concentration" | "pricing_comparison" | "budget_pressure";
+export type InsightSeverity = "info" | "warning" | "critical";
+export type CompatibilitySignal = "none" | "catalog_superset";
+
+export interface CostConcentrationInsight {
+  type: "cost_concentration";
+  id: string;
+  severity: InsightSeverity;
+  title: string;
+  description: string;
+  providerId: string;
+  modelId: string;
+  estimatedCostUsd: string;
+  totalEstimatedCostUsd: string;
+  shareRatio: string;
+  requestCount: number;
+}
+
+export interface PricingComparisonInsight {
+  type: "pricing_comparison";
+  id: string;
+  severity: InsightSeverity;
+  title: string;
+  description: string;
+  providerId: string;
+  modelId: string;
+  observedRequestCount: number;
+  observedInputTokens: number;
+  observedOutputTokens: number;
+  observedEstimatedCostUsd: string;
+  currentPricedCostUsd: string;
+  alternativeProviderId: string;
+  alternativeModelId: string;
+  counterfactualEstimatedCostUsd: string;
+  costDifferenceUsd: string;
+  compatibilitySignal: CompatibilitySignal;
+  assumptions: string[];
+}
+
+export interface BudgetPressureInsight {
+  type: "budget_pressure";
+  id: string;
+  severity: InsightSeverity;
+  title: string;
+  description: string;
+  budgetId: string;
+  scope: "global" | "client";
+  clientId: string | null;
+  period: string;
+  action: string;
+  limitUsd: string;
+  currentSpendUsd: string;
+  remainingUsd: string;
+  utilization: string;
+  status: "below_limit" | "at_limit" | "over_limit";
+}
+
+export type OptimizationInsight =
+  | CostConcentrationInsight
+  | PricingComparisonInsight
+  | BudgetPressureInsight;
+
+export interface OptimizationThresholds {
+  concentrationRatioThreshold: string;
+  minSpendUsd: string;
+  budgetPressureRatioThreshold: string;
+  pricingComparisonMinDeltaUsd: string;
+  maxPricingAlternatives: number;
+}
+
+export interface OptimizationInsightsResponse {
+  window: { since: string; until: string };
+  thresholds: OptimizationThresholds;
+  pricingTableVersionId: string;
+  insights: OptimizationInsight[];
+}
+
+export interface OptimizationInsightsOptions {
+  since?: string;
+  until?: string;
+  clientId?: string;
+  providerId?: string;
+  modelId?: string;
+  apiKey?: string;
+  signal?: AbortSignal;
+}
+
+// Mirrors GET /v1/telemetry/optimization-insights (since/until/clientId/providerId/modelId).
+// Advisory only; all monetary values stay as exact decimal strings (never Number here).
+export function getOptimizationInsights(
+  opts: OptimizationInsightsOptions = {},
+): Promise<OptimizationInsightsResponse> {
+  const q = new URLSearchParams();
+  if (opts.since) q.set("since", opts.since);
+  if (opts.until) q.set("until", opts.until);
+  if (opts.clientId) q.set("clientId", opts.clientId);
+  if (opts.providerId) q.set("providerId", opts.providerId);
+  if (opts.modelId) q.set("modelId", opts.modelId);
+  const search = q.toString();
+  const path = `/v1/telemetry/optimization-insights${search ? `?${search}` : ""}`;
+  const reqOpts: { apiKey?: string; signal?: AbortSignal } = {};
+  if (opts.apiKey) reqOpts.apiKey = opts.apiKey;
+  if (opts.signal) reqOpts.signal = opts.signal;
+  return apiRequest<OptimizationInsightsResponse>(path, reqOpts);
+}
+

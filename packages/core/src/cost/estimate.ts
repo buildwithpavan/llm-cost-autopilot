@@ -29,6 +29,17 @@ export function subtractUsd(a: string, b: string): string {
   return formatUsd(new Decimal(a).minus(b));
 }
 
+/**
+ * Exact `part / whole` as a fixed 6-decimal ratio string (e.g. "0.250000").
+ * Returns "0.000000" when `whole` is zero. No floating point; mirrors the
+ * budget-utilization ratio convention.
+ */
+export function ratioUsd(part: string, whole: string): string {
+  const w = new Decimal(whole);
+  if (w.eq(0)) return "0.000000";
+  return new Decimal(part).div(w).toFixed(6);
+}
+
 export function estimateCostUsd(input: EstimateCostInput): string {
   const entry = input.table.entries.find(
     (e) => e.providerId === input.providerId && e.modelId === input.modelId,

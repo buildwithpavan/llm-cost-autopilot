@@ -29,6 +29,13 @@ const baseEnvSchema = z.object({
   LCA_ANOMALY_REL_THRESHOLD: z.coerce.number().positive().max(100).default(0.5),
   LCA_ANOMALY_CRIT_REL_THRESHOLD: z.coerce.number().positive().max(1000).default(1),
   LCA_ANOMALY_MIN_ABS_USD: z.string().regex(/^\d+(\.\d+)?$/).default("0.010000"),
+  // Cost optimization insights (Phase 15). Advisory only; thresholds are exact
+  // decimal strings (ratios and USD amounts), never floating-point.
+  LCA_OPT_CONCENTRATION_RATIO: z.string().regex(/^\d+(\.\d+)?$/).default("0.40"),
+  LCA_OPT_MIN_SPEND_USD: z.string().regex(/^\d+(\.\d+)?$/).default("0.010000"),
+  LCA_OPT_BUDGET_PRESSURE_RATIO: z.string().regex(/^\d+(\.\d+)?$/).default("0.80"),
+  LCA_OPT_PRICING_MIN_DELTA_USD: z.string().regex(/^\d+(\.\d+)?$/).default("0.010000"),
+  LCA_OPT_MAX_PRICING_ALTERNATIVES: z.coerce.number().int().min(0).max(10).default(1),
 });
 
 const envSchema = baseEnvSchema.refine(

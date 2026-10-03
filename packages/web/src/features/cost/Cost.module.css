@@ -832,4 +832,129 @@
   font-size: 11px;
 }
 
+.sevInfo {
+  color: var(--text-secondary);
+  border-color: var(--border-muted);
+  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+}
+
+/* Cost optimization insights (advisory) ----------------------------------- */
+.insightList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.insightCard {
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-card);
+  background: var(--bg-card);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.insightTop {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.insightType {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.insightSubject {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.insightMag {
+  margin-left: auto;
+  text-align: right;
+}
+
+.insightMagValue {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.insightMagLabel {
+  display: block;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.insightTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.insightDesc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.insightDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+}
+
+.insightDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.insightDetailLabel {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.insightDetailValue {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.insightNote {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  border-top: 1px dashed var(--border-default);
+  padding-top: 8px;
+}
+
+.insightAssumptions {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.insightFoot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 
