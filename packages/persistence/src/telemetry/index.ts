@@ -20,5 +20,7 @@ export type {
   TelemetrySummaryProviderGroup,
   TelemetrySummaryModelGroup,
 } from "./summary.js";
+export { aggregateTelemetryTimeseries } from "./timeseries.js";
+export type { TimeseriesBucket, TimeseriesFilters, TimeseriesPoint } from "./timeseries.js";
 export { createTelemetryWriter, writeTelemetryImmediate } from "./write.js";
 export type { TelemetryWriter, TelemetryWriterOptions } from "./write.js";

@@ -22,6 +22,7 @@ import previewRoute from "./routes/preview.js";
 import catalogRoute from "./routes/catalog.js";
 import telemetryEventsRoute from "./routes/telemetry-events.js";
 import telemetrySummaryRoute from "./routes/telemetry-summary.js";
+import telemetryTimeseriesRoute from "./routes/telemetry-timeseries.js";
 import telemetryRollupsRoute from "./routes/telemetry-rollups.js";
 import telemetryReplayRoute from "./routes/telemetry-replay.js";
 import telemetryBudgetDecisionsRoute from "./routes/telemetry-budget-decisions.js";
@@ -130,6 +131,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   await app.register(providerHealthRoute, { db: deps.db });
   await app.register(telemetryEventsRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetrySummaryRoute, { db: deps.db, registry: deps.registry });
+  await app.register(telemetryTimeseriesRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryRollupsRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryReplayRoute, { db: deps.db, registry: deps.registry });
   await app.register(telemetryBudgetDecisionsRoute, { db: deps.db, registry: deps.registry });
