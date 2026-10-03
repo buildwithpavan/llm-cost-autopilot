@@ -11,6 +11,12 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   LCA_MOCK_FAIL_FIRST: z.string().optional(),
+  // Provider reliability (Phase 8). Per-attempt timeout + bounded retry policy.
+  // Retries are off by default (0) to preserve reviewed fallback behavior.
+  LCA_PROVIDER_TIMEOUT_MS: z.coerce.number().int().positive().max(600_000).default(30_000),
+  LCA_PROVIDER_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(0),
+  LCA_PROVIDER_RETRY_BACKOFF_MS: z.coerce.number().int().min(0).max(60_000).default(100),
+  LCA_PROVIDER_RETRY_BACKOFF_MAX_MS: z.coerce.number().int().min(0).max(120_000).default(2_000),
 });
 
 export type LcaConfig = z.infer<typeof envSchema>;

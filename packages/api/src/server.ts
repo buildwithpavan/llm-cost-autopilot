@@ -7,6 +7,7 @@ import type { ProviderRegistry } from "@lca/providers";
 
 import type { LcaConfig } from "./config.js";
 import { getSharedMetrics, type Metrics } from "./plugins/metrics.js";
+import { policyFromConfig } from "./routing/provider-attempt.js";
 import authPlugin from "./plugins/auth.js";
 import { errorHandler } from "./plugins/errors.js";
 import healthRoute from "./routes/health.js";
@@ -96,6 +97,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     registry: deps.registry,
     telemetryWriter: deps.telemetryWriter,
     metrics,
+    providerAttempt: policyFromConfig(deps.config),
     ...(deps.ruleStore ? { ruleStore: deps.ruleStore } : {}),
     ...(deps.budgetStore ? { budgetStore: deps.budgetStore } : {}),
   });

@@ -17,6 +17,11 @@ import { writeBudgetDecision, type OperatorRuleStore, type TelemetryWriter } fro
 
 import { loadCatalogSnapshot, type AppContext } from "../wiring.js";
 import { buildRoutingDecision, resolveGovernance } from "../routing/resolve-decision.js";
+import {
+  DEFAULT_PROVIDER_ATTEMPT_POLICY,
+  runProviderAttempt,
+  type ProviderAttemptPolicy,
+} from "../routing/provider-attempt.js";
 import { evaluateRequestBudgets } from "../budgets/evaluate-request-budgets.js";
 import { LcaError } from "../plugins/errors.js";
 import { recordCompletionMetrics } from "../plugins/request-metrics.js";
@@ -28,6 +33,7 @@ export interface CompletionsDeps extends AppContext {
   ruleStore?: OperatorRuleStore;
   streamBus?: TelemetryStreamBus;
   metrics?: Metrics;
+  providerAttempt?: ProviderAttemptPolicy;
 }
 
 interface CompletionResponseBody extends NormalizedResponse {
@@ -232,7 +238,7 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
     }
 
     const requestStart = Date.now();
-    const controller = new AbortController();
+    const providerPolicy = deps.providerAttempt ?? DEFAULT_PROVIDER_ATTEMPT_POLICY;
     const fallbackOutcome = await routing.executeWithFallback({
       request: normalized,
       decision,
@@ -276,15 +282,17 @@ const plugin: FastifyPluginAsync<CompletionsDeps> = async (fastify, deps) => {
             attempt: failedAttempt,
           };
         }
-        const outcome = await targetAdapter.execute(
-          {
+        const outcome = await runProviderAttempt({
+          adapter: targetAdapter,
+          input: {
             request: normalized,
             modelId,
             pricingTable: snapshot.pricingTable,
-            deadlineAt: new Date(Date.now() + 30_000).toISOString(),
+            deadlineAt: new Date(Date.now() + providerPolicy.timeoutMs).toISOString(),
           },
-          controller.signal,
-        );
+          attemptIndex,
+          policy: providerPolicy,
+        });
         if (outcome.kind === "success") {
           const attempt = { ...outcome.attempt, attemptIndex };
           bus.publish({

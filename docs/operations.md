@@ -5,17 +5,18 @@ Concrete playbooks for running the backend in dev, staging, and production. This
 ## Contents
 
 1. [Environment configuration](#environment-configuration)
-2. [Deployment shape](#deployment-shape)
-3. [Database migrations](#database-migrations)
-4. [Pricing snapshots](#pricing-snapshots)
-5. [Provider registration and health](#provider-registration-and-health)
-6. [Operator rules](#operator-rules)
-7. [API keys](#api-keys)
-8. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
-9. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
-10. [Observability endpoints](#observability-endpoints)
-11. [Backup and restore](#backup-and-restore)
-12. [Incident playbooks](#incident-playbooks)
+2. [Provider reliability (timeout + retry)](#provider-reliability-timeout--retry)
+3. [Deployment shape](#deployment-shape)
+4. [Database migrations](#database-migrations)
+5. [Pricing snapshots](#pricing-snapshots)
+6. [Provider registration and health](#provider-registration-and-health)
+7. [Operator rules](#operator-rules)
+8. [API keys](#api-keys)
+9. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
+10. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
+11. [Observability endpoints](#observability-endpoints)
+12. [Backup and restore](#backup-and-restore)
+13. [Incident playbooks](#incident-playbooks)
 
 ---
 
@@ -35,8 +36,26 @@ Configuration is loaded by [packages/api/src/config.ts](../packages/api/src/conf
 | `OPENAI_API_KEY` | no | When set, the OpenAI adapter is registered at boot. |
 | `ANTHROPIC_API_KEY` | no | When set, the Anthropic adapter is registered at boot. |
 | `LCA_MOCK_FAIL_FIRST` | no | Test-only: mock adapters fail their first call with this `ErrorClass`. Do not set in production. |
+| `LCA_PROVIDER_TIMEOUT_MS` | no (`30000`) | Per-attempt provider execution timeout in milliseconds. Must be a positive integer (≤ 600000). Applies to a single physical provider call, not the whole fallback chain. |
+| `LCA_PROVIDER_MAX_RETRIES` | no (`0`) | Additional retries of the **same** provider candidate on a retryable failure, before fallback. Integer `0`–`5`. Default `0` preserves the reviewed fallback behavior; set `≥ 1` to opt in. |
+| `LCA_PROVIDER_RETRY_BACKOFF_MS` | no (`100`) | Base backoff before the first retry, in milliseconds (non-negative integer ≤ 60000). `0` disables sleeping between retries. |
+| `LCA_PROVIDER_RETRY_BACKOFF_MAX_MS` | no (`2000`) | Cap on any single backoff delay, in milliseconds (non-negative integer ≤ 120000). |
 
 Provider credentials are read at process start only. Rotating them requires a restart.
+
+## Provider reliability (timeout + retry)
+
+Each physical provider call is wrapped by [packages/api/src/routing/provider-attempt.ts](../packages/api/src/routing/provider-attempt.ts) with two bounded safeguards:
+
+- **Per-attempt timeout** (`LCA_PROVIDER_TIMEOUT_MS`, default 30 s). When a single attempt exceeds the timeout, its `AbortSignal` is aborted (cancelling in-flight work where the adapter honors it) and the attempt is recorded as a structured `timeout` failure. The timeout bounds one attempt, never the whole logical request; it never blocks the event loop.
+- **Bounded per-candidate retry** (`LCA_PROVIDER_MAX_RETRIES`, default `0`). On a **retryable** failure the same provider candidate is retried up to `maxRetries` times with bounded exponential backoff (`base`, `base·2`, … capped at `LCA_PROVIDER_RETRY_BACKOFF_MAX_MS`). Total physical calls per candidate are deterministically bounded at `maxRetries + 1`.
+
+**Retryable vs non-retryable.** Only transient infrastructure faults are retried: `timeout`, `rate_limit`, `upstream_5xx`. Everything else is terminal and never retried — deterministic client/validation errors (`invalid_request`, `context_exceeded`, `upstream_4xx`), invalid routing targets (`override_target_missing`, `provider_unavailable`), unexpected adapter throws (mapped to `provider_unavailable`), and — by construction, since they never reach provider execution — budget blocks and governance failures.
+
+**Interaction with fallback.** Retrying a candidate is distinct from moving to the next candidate. A candidate is first retried per policy; only if it still fails with a retryable class does the existing fallback executor select the next candidate, which then runs under the same bounded policy. Provider selection order is unchanged. Retries of a candidate collapse into that candidate's single telemetry attempt, so the persisted `attempts` array still holds at most two entries (chosen + one fallback) and Phase-7 request metrics still count one logical request, one duration observation, and unchanged routing overhead per request regardless of retries.
+
+**Budget safety.** Budget evaluation happens before provider execution and is never re-evaluated or re-reserved across retries; a budget-blocked request never enters retry logic and produces no provider attempt.
+
 
 ## Deployment shape
 
