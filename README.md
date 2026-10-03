@@ -109,7 +109,8 @@ All non-`/v1/health` routes require `Authorization: Bearer <api_key>`. The canon
 | `GET /v1/telemetry/events/stream` | Server-Sent Events stream of live telemetry (includes `budget.evaluated`) |
 | `GET \| POST /v1/operator/rules` | List / create operator routing rules |
 | `PATCH \| DELETE /v1/operator/rules/{ruleId}` | Update / remove a rule |
-| `GET \| POST \| DELETE /v1/keys[/{keyId}]` | Manage API keys (plaintext secret returned only on create) |
+| `GET \| POST /v1/keys` | List metadata / create an API key (plaintext secret returned only on create; there is no get-by-id route) |
+| `DELETE /v1/keys/{keyId}` | Revoke an API key (returns `204`) |
 
 Correlation is via `x-request-id` (echoed on the response and used as `TelemetryEvent.eventId`).
 
