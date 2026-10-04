@@ -40,6 +40,8 @@ Configuration is loaded by [packages/api/src/config.ts](../packages/api/src/conf
 | `LCA_BOOTSTRAP_ADMIN_KEY` | no | Reserved. Not consumed at runtime today; keys are minted via `POST /v1/keys`. |
 | `OPENAI_API_KEY` | no | When set, the OpenAI adapter is registered at boot. |
 | `ANTHROPIC_API_KEY` | no | When set, the Anthropic adapter is registered at boot. |
+| `GEMINI_API_KEY` | no | When set, the Google Gemini adapter is registered at boot (native Gemini REST API). Absent ⇒ provider not registered. |
+| `GROQ_API_KEY` | no | When set, the Groq adapter is registered at boot (OpenAI-compatible API). Absent ⇒ provider not registered. |
 | `LCA_MOCK_FAIL_FIRST` | no | Test-only: mock adapters fail their first call with this `ErrorClass`. Do not set in production. |
 | `LCA_PROVIDER_TIMEOUT_MS` | no (`30000`) | Per-attempt provider execution timeout in milliseconds. Must be a positive integer (≤ 600000). Applies to a single physical provider call, not the whole fallback chain. |
 | `LCA_PROVIDER_MAX_RETRIES` | no (`0`) | Additional retries of the **same** provider candidate on a retryable failure, before fallback. Integer `0`–`5`. Default `0` preserves the reviewed fallback behavior; set `≥ 1` to opt in. |
@@ -220,7 +222,11 @@ Every persisted `TelemetryEvent.pricingTableVersionId` foreign-keys into `pricin
 Adapters are registered at API startup in [packages/api/src/index.ts](../packages/api/src/index.ts):
 
 - Mock adapters (`mock-cheap`, `mock-fast`) are always registered — safe for tests and local dev.
-- OpenAI and Anthropic adapters are registered only when the corresponding API-key env var is set.
+- OpenAI, Anthropic, Gemini, and Groq adapters are each registered only when the corresponding API-key env var is set (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`). A provider with no configured key is never registered, so a missing credential can never present a misleadingly "healthy" provider. Credentials come only from the environment — they are never logged, persisted to the frontend, or returned in any API response.
+
+**Gemini and Groq.** Both are thin adapters over their official APIs: Groq reuses the OpenAI-compatible Chat Completions surface (the existing `openai` SDK pointed at Groq's base URL); Gemini uses the native `generateContent` REST endpoint via `fetch` (no new dependency). Both honor the shared per-attempt timeout, `AbortController`, retry, circuit-breaker, and logical-deadline mechanisms and add none of their own. Provider/API failures normalize to the existing error classes (`timeout`, `rate_limit`, `upstream_5xx`, `upstream_4xx`, `provider_unavailable`). Model ids are catalog-configured (adapter `listModels()` + a pricing entry): Gemini ships `gemini:gemini-3.5-flash-lite` / `gemini:gemini-3.5-flash`; Groq ships `groq:openai/gpt-oss-20b` / `groq:openai/gpt-oss-120b`. For routable use the model must have a pricing entry in the active table — fresh installs get these from `db:seed`; existing deployments pick them up by rolling a new pricing snapshot (see [Pricing snapshots](#pricing-snapshots)).
+
+**Free-tier caveat.** Gemini and Groq both offer free development tiers, but those limits/quotas are imposed by the provider and can change at any time — the autopilot makes no free-usage guarantee and encodes no quota in runtime behavior. The catalog prices every model at the provider's published **list (economic) price** (per-1M-token rates converted to exact per-token decimal strings), identical to the existing OpenAI/Anthropic entries; routing cost estimates therefore reflect list price even when a provider's free tier means the operator's actual bill is $0.
 
 Health state lives in `provider_health_state`. The scheduler in [packages/persistence/src/health/scheduler.ts](../packages/persistence/src/health/scheduler.ts) probes each adapter every 30 s, flips to `unhealthy` after 3 consecutive failures, and back to `healthy` on a successful probe. Unhealthy providers are excluded from routing candidates (see [tests](../packages/api/test/integration/unhealthy-exclusion.test.ts)). When every provider is unhealthy, `POST /v1/completions` returns `422 provider_unavailable` and no provider call is made.
 

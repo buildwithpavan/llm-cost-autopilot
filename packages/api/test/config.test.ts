@@ -57,6 +57,22 @@ describe("provider reliability config (Phase 8)", () => {
   });
 });
 
+describe("optional provider credentials", () => {
+  it("leaves all provider API keys undefined when absent (optional; startup must not fail)", () => {
+    const c = loadConfig(BASE);
+    expect(c.OPENAI_API_KEY).toBeUndefined();
+    expect(c.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(c.GEMINI_API_KEY).toBeUndefined();
+    expect(c.GROQ_API_KEY).toBeUndefined();
+  });
+
+  it("accepts Gemini and Groq keys when provided", () => {
+    const c = loadConfig({ ...BASE, GEMINI_API_KEY: "gm-x", GROQ_API_KEY: "gsk-x" });
+    expect(c.GEMINI_API_KEY).toBe("gm-x");
+    expect(c.GROQ_API_KEY).toBe("gsk-x");
+  });
+});
+
 describe("logical-request deadline config (Phase 14)", () => {
   it("defaults to disabled (0)", () => {
     expect(loadConfig(BASE).LCA_REQUEST_DEADLINE_MS).toBe(0);

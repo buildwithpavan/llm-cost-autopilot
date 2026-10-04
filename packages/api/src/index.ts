@@ -10,6 +10,8 @@ import {
 } from "@lca/persistence";
 import {
   createAnthropicAdapter,
+  createGeminiAdapter,
+  createGroqAdapter,
   createMockFromEnv,
   createOpenAiAdapter,
   createRegistry,
@@ -52,6 +54,14 @@ async function main(): Promise<void> {
   if (config.ANTHROPIC_API_KEY) {
     registry.register(createAnthropicAdapter({ apiKey: config.ANTHROPIC_API_KEY }));
     await setProviderHealth(db, "anthropic", true, 0);
+  }
+  if (config.GEMINI_API_KEY) {
+    registry.register(createGeminiAdapter({ apiKey: config.GEMINI_API_KEY }));
+    await setProviderHealth(db, "gemini", true, 0);
+  }
+  if (config.GROQ_API_KEY) {
+    registry.register(createGroqAdapter({ apiKey: config.GROQ_API_KEY }));
+    await setProviderHealth(db, "groq", true, 0);
   }
   await setProviderHealth(db, "mock-cheap", true, 0);
   await setProviderHealth(db, "mock-fast", true, 0);

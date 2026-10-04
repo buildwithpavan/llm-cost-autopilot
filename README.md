@@ -27,7 +27,7 @@ The project constitution ([.specify/memory/constitution.md](.specify/memory/cons
 ```
 packages/
   core/           @lca/core          – vendor-neutral logic: types, routing, evaluation, cost, redaction, overrides, telemetry
-  providers/      @lca/providers     – provider abstraction + adapters (mock, openai, anthropic) + shared contract suite
+  providers/      @lca/providers     – provider abstraction + adapters (mock, openai, anthropic, gemini, groq) + shared contract suite
   persistence/    @lca/persistence   – Postgres access: schema, migrations, telemetry writer/rollups/retention, auth, catalog, health
   api/            @lca/api           – Fastify HTTP entrypoint (thin shell)
   cli/            @lca/cli           – `lca` command-line (mirrors API)
@@ -40,7 +40,7 @@ scripts/          audit-secrets, scaffold-provider
 specs/            Spec Kit artifacts (spec / plan / tasks / contracts)
 ```
 
-The provider-abstraction boundary is enforced by ESLint (`eslint.config.mjs`) and by [packages/core/test/no-vendor-imports.test.ts](packages/core/test/no-vendor-imports.test.ts): only `packages/providers/src/openai/*` may import `openai`; only `packages/providers/src/anthropic/*` may import `@anthropic-ai/sdk`.
+The provider-abstraction boundary is enforced by ESLint (`eslint.config.mjs`) and by [packages/core/test/no-vendor-imports.test.ts](packages/core/test/no-vendor-imports.test.ts): only `packages/providers/src/openai/*` and `packages/providers/src/groq/*` (Groq is OpenAI-compatible) may import `openai`; only `packages/providers/src/anthropic/*` may import `@anthropic-ai/sdk`. The Gemini adapter uses the native REST API via `fetch` (no vendor SDK).
 
 ## Quickstart
 

@@ -9,6 +9,8 @@ const FORBIDDEN_SPECIFIERS = ["openai", "@anthropic-ai/sdk"];
 const ALLOWED_DIRS = [
   path.join(ROOT, "packages/providers/src/openai"),
   path.join(ROOT, "packages/providers/src/anthropic"),
+  // Groq exposes an OpenAI-compatible API and intentionally reuses the openai SDK.
+  path.join(ROOT, "packages/providers/src/groq"),
 ];
 
 const SCAN_DIRS = [
@@ -70,14 +72,17 @@ describe("vendor-SDK import boundary (T102 / Principle VI)", () => {
     expect(offenders, `unexpected vendor SDK imports: ${JSON.stringify(offenders, null, 2)}`).toEqual([]);
   });
 
-  it("the only openai importer is packages/providers/src/openai/adapter.ts", () => {
+  it("only the openai + groq adapters import the openai SDK", () => {
     const openaiImporters: string[] = [];
     for (const file of walk(path.join(ROOT, "packages"))) {
       if (file.includes("/dist/") || file.includes("/node_modules/") || file.includes("/test/")) continue;
       const src = readFileSync(file, "utf8");
       if (/from\s+["']openai["']/.test(src)) openaiImporters.push(path.relative(ROOT, file));
     }
-    expect(openaiImporters).toEqual(["packages/providers/src/openai/adapter.ts"]);
+    expect(openaiImporters.sort()).toEqual([
+      "packages/providers/src/groq/adapter.ts",
+      "packages/providers/src/openai/adapter.ts",
+    ]);
   });
 
   it("the only @anthropic-ai/sdk importer is packages/providers/src/anthropic/adapter.ts", () => {

@@ -10,6 +10,8 @@ const baseEnvSchema = z.object({
   LCA_BOOTSTRAP_ADMIN_KEY: z.string().min(16).optional(),
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  GROQ_API_KEY: z.string().optional(),
   LCA_MOCK_FAIL_FIRST: z.string().optional(),
   // Provider reliability (Phase 8). Per-attempt timeout + bounded retry policy.
   // Retries are off by default (0) to preserve reviewed fallback behavior.
