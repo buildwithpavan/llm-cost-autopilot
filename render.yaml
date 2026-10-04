@@ -1,0 +1,97 @@
+# render.yaml — Render Blueprint for LLM Cost Autopilot (zero-cost staging / dogfooding).
+#
+# Provisions two Node web services on Render's free plan, backed by an external
+# Supabase PostgreSQL database. No AWS. No managed Render database (the free
+# Render Postgres expires after 30 days; Supabase is used instead).
+#
+# SECURITY: this file contains NO secrets. Every secret (database URL, provider
+# keys, demo API key, the API upstream URL) is declared with `sync: false`,
+# which means Render prompts for it in the dashboard (or `render env set`) and it
+# is never committed to git. Do not replace any `sync: false` with a value.
+#
+# Full walkthrough (Supabase setup, migrations, API-key bootstrap, smoke tests,
+# free-tier limits): docs/operations.md →
+# "Deployment: Render + Supabase (zero-cost staging)".
+
+services:
+  # ---------------------------------------------------------------------------
+  # API — Fastify backend (Node web service).
+  # Already Render-ready: binds 0.0.0.0 on $PORT and shuts down gracefully on
+  # SIGTERM. Requires the Supabase schema to be migrated + a pricing snapshot
+  # seeded BEFORE first boot (it refuses to start with no active pricing table).
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: lca-api
+    runtime: node
+    plan: free
+    # All free services + Supabase should sit in the same region to minimise
+    # latency. Adjust to your Supabase region (oregon | frankfurt | singapore …).
+    region: oregon
+    # `npm ci` honours NODE_ENV=production (set below) and would drop
+    # devDependencies (typescript, …), breaking `tsc --build`. `--include=dev`
+    # forces them for the build only; the running process stays NODE_ENV=production.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start:api
+    # `/v1/health` is public and returns 200 only when the DB is reachable AND a
+    # pricing table is active — exactly the readiness signal Render needs.
+    healthCheckPath: /v1/health
+    # Optional: on a PAID instance type you can run migrations automatically on
+    # every deploy instead of the manual step in operations.md. Both commands are
+    # idempotent. Pre-deploy does NOT run on the free plan, so it is left off here.
+    # preDeployCommand: npm run db:migrate && npm run db:seed
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LCA_LOG_LEVEL
+        value: info
+      # Supabase connection string, including `?sslmode=require`. Secret.
+      # Use the Session pooler or direct connection (NOT the transaction pooler
+      # on port 6543 — the pg Pool needs session/prepared-statement support).
+      - key: DATABASE_URL
+        sync: false
+      # Optional provider credentials — set ONLY the ones you use. A provider is
+      # registered only when its key is present. Never exposed to the browser.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      # PORT is injected automatically by Render; the API reads it via config.
+
+  # ---------------------------------------------------------------------------
+  # Web — Next.js dashboard (Node web service).
+  # MUST be a server (not a Static Site): next.config.ts uses rewrites() to proxy
+  # /api/backend/* → $LCA_API_UPSTREAM, which requires the Next.js runtime and is
+  # incompatible with `output: export`. This proxy is also the production gateway:
+  # the browser only ever talks to this same-origin service, never the API
+  # cross-origin, so the API runs with CORS off (NODE_ENV=production) and no
+  # wildcard origin is ever configured.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: lca-web
+    runtime: node
+    plan: free
+    region: oregon
+    # Root `npm run build` produces @lca/core's dist (consumed by the web build),
+    # then the web workspace runs `next build`.
+    buildCommand: npm ci --include=dev && npm run build && npm run build -w @lca/web
+    # `next start` honours -p; $PORT is injected by Render.
+    startCommand: cd packages/web && npx next start -p $PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Server-side upstream for the rewrite proxy — the lca-api URL, e.g.
+      # https://lca-api.onrender.com. NOT prefixed NEXT_PUBLIC_, so it is never
+      # shipped to the browser. Secret-ish (set per environment).
+      - key: LCA_API_UPSTREAM
+        sync: false
+      # The browser calls the same-origin Next.js rewrite, never the API host.
+      - key: NEXT_PUBLIC_LCA_API_BASE_URL
+        value: /api/backend
+      - key: NEXT_PUBLIC_LCA_ENV
+        value: staging
+      # Demo / untrusted-client bearer key, minted via the bootstrap step. This
+      # IS baked into the browser bundle by design (the dashboard is an untrusted
+      # client), so use a dedicated, low-privilege, rotatable key — never a
+      # production admin key. Secret (prompted in the dashboard).
+      - key: NEXT_PUBLIC_LCA_API_KEY
+        sync: false

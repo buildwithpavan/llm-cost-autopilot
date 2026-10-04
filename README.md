@@ -231,6 +231,24 @@ node scripts/audit-secrets.mjs   # secret-leak audit
 
 The Spec Kit workflow is documented in `.github/skills/`. All work should follow the Test-First rule required by constitution Principle III.
 
+## Deployment
+
+A committed [render.yaml](render.yaml) Blueprint provisions a zero-cost **staging / dogfooding** deployment on Render's free plan backed by Supabase PostgreSQL — no AWS, no secrets in git:
+
+```
+browser ──HTTPS──▶ lca-web (Render, Next.js server)
+                         │  /api/backend/*  (same-origin rewrite, server-to-server)
+                         ▼
+                   lca-api (Render, Fastify, NODE_ENV=production)
+                         │  TLS (?sslmode=require)
+                         ▼
+                   Supabase PostgreSQL
+```
+
+The dashboard proxies the API through a same-origin Next.js rewrite, so the browser never calls the API cross-origin and the API keeps CORS off in production (no wildcard). Provider keys (`GEMINI_API_KEY`, `GROQ_API_KEY`, …) live only on the API and are never exposed to the browser; both providers are optional and the always-on Mock providers keep the system fully functional with no provider keys. Every secret in the Blueprint uses `sync: false` and is entered in the Render dashboard.
+
+Full walkthrough — Supabase setup, one-off migrate/seed, first-key bootstrap, the environment-variable matrix, deterministic smoke tests, and free-tier/cold-start limits — is in [docs/operations.md → Deployment: Render + Supabase](docs/operations.md#deployment-render--supabase-zero-cost-staging).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

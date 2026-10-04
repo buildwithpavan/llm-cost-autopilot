@@ -10,18 +10,19 @@ Concrete playbooks for running the backend in dev, staging, and production. This
 4. [Cost anomaly detection](#cost-anomaly-detection)
 5. [Cost optimization insights](#cost-optimization-insights)
 6. [Deployment shape](#deployment-shape)
-7. [HTTP security hardening](#http-security-hardening)
-8. [Performance and benchmarks](#performance-and-benchmarks)
-9. [Database migrations](#database-migrations)
-10. [Pricing snapshots](#pricing-snapshots)
-11. [Provider registration and health](#provider-registration-and-health)
-12. [Operator rules](#operator-rules)
-13. [API keys](#api-keys)
-14. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
-15. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
-16. [Observability endpoints](#observability-endpoints)
-17. [Backup and restore](#backup-and-restore)
-18. [Incident playbooks](#incident-playbooks)
+7. [Deployment: Render + Supabase (zero-cost staging)](#deployment-render--supabase-zero-cost-staging)
+8. [HTTP security hardening](#http-security-hardening)
+9. [Performance and benchmarks](#performance-and-benchmarks)
+10. [Database migrations](#database-migrations)
+11. [Pricing snapshots](#pricing-snapshots)
+12. [Provider registration and health](#provider-registration-and-health)
+13. [Operator rules](#operator-rules)
+14. [API keys](#api-keys)
+15. [Telemetry retention and rollups](#telemetry-retention-and-rollups)
+16. [Reconciliation and drift alerting](#reconciliation-and-drift-alerting)
+17. [Observability endpoints](#observability-endpoints)
+18. [Backup and restore](#backup-and-restore)
+19. [Incident playbooks](#incident-playbooks)
 
 ---
 
@@ -173,6 +174,168 @@ For local development use [docker/docker-compose.dev.yml](../docker/docker-compo
 The MVP is single-tenant and single-node per deployment. Horizontal scaling is possible for the request path — telemetry writes are batched but not queued, and retention runs in-process under a Postgres advisory lock, so multiple replicas coexist safely. There is no support for tenant isolation today.
 
 On `SIGINT`/`SIGTERM` the API shuts down gracefully: it stops the retention, health-probe, and reconciliation schedulers, flushes the batched telemetry writer, then closes the HTTP server and database pool and exits 0.
+
+## Deployment: Render + Supabase (zero-cost staging)
+
+A concrete, $0-infrastructure recipe for a **staging / dogfooding** deployment: both services run on Render's free plan and the database is a free Supabase Postgres project. This is the deployment the committed [render.yaml](../render.yaml) Blueprint provisions. It is a staging shape — see [Free-tier constraints](#free-tier-constraints-and-cold-starts) before treating it as production.
+
+> No application code changes are required for this deployment. The API already binds `0.0.0.0:$PORT`, shuts down gracefully, and reads all configuration from the environment; the Postgres pool already honours TLS via the connection string; and the dashboard already proxies the API through a same-origin rewrite. The Blueprint and this guide are the only deployment artifacts.
+
+### Architecture
+
+```
+            browser
+               │  (HTTPS, same-origin only)
+               ▼
+   ┌───────────────────────────┐        server-to-server
+   │  lca-web  (Render, Node)  │  /api/backend/*  ───────────────┐
+   │  Next.js server + rewrite │                                 │
+   └───────────────────────────┘                                 ▼
+                                               ┌───────────────────────────┐
+                                               │  lca-api (Render, Node)   │
+                                               │  Fastify, NODE_ENV=prod   │
+                                               └───────────────────────────┘
+                                                             │  (TLS, sslmode=require)
+                                                             ▼
+                                               ┌───────────────────────────┐
+                                               │  Supabase PostgreSQL      │
+                                               └───────────────────────────┘
+```
+
+The browser only ever talks to the **same-origin** `lca-web` service. The dashboard's API calls go to `/api/backend/*`, which the Next.js `rewrites()` proxy ([packages/web/next.config.ts](../packages/web/next.config.ts)) forwards **server-to-server** to `$LCA_API_UPSTREAM` (the `lca-api` URL). The browser never issues a cross-origin request to the API, so the API keeps its production posture (CORS off — see [HTTP security hardening](#http-security-hardening)) and **no wildcard origin is ever configured**. The rewrite proxy *is* the "gateway that enforces origin allowlisting" referenced in the hardening section.
+
+Because `rewrites()` requires the Next.js server runtime, the dashboard **cannot** be a Render Static Site (`output: export` is incompatible); it is deployed as a Node web service.
+
+### Prerequisites
+
+- A Render account and a Supabase account (both free). **These require account-level authorization in each provider's dashboard; nothing in this repository can create them for you.**
+- The repository pushed to a GitHub repo Render can read.
+- Node.js 22 locally (to run the one-off migration + bootstrap steps against Supabase).
+
+### 1. Create the Supabase database
+
+1. Create a new Supabase project; pick a region close to your chosen Render region.
+2. In **Project Settings → Database**, copy a connection string. Use the **Session pooler** (port `5432`) or the **direct connection** — **not** the transaction pooler (port `6543`), which does not support the session/prepared-statement semantics the `pg` Pool relies on.
+3. Append `?sslmode=require` to the string. The pool in [packages/persistence/src/db/schema.ts](../packages/persistence/src/db/schema.ts) passes the connection string straight to `pg`, which enables TLS from `sslmode` with no code change. Supabase presents a publicly-trusted certificate, so `require` validates cleanly. (Only if certificate validation ever fails — e.g. a self-signed proxy — fall back to `?sslmode=no-verify`.)
+
+This is the value for the `DATABASE_URL` secret.
+
+### 2. Migrate + seed the database (one-off, before first boot)
+
+The API refuses to boot until the schema exists and a pricing table is active, and Render's free plan does not run a pre-deploy command. Run these **once** from a local checkout, pointed at Supabase, after `npm run build`:
+
+```bash
+export DATABASE_URL='postgres://…:…@…supabase.com:5432/postgres?sslmode=require'
+npm run build
+npm run db:migrate   # applies db/migrations/* in order (idempotent, tracked in schema_migrations)
+npm run db:seed      # activates the current pricing snapshot (idempotent)
+```
+
+A fresh Supabase database is empty, so the ordinary transactional migration path is correct — including the Phase 17 `telemetry_events_received_at` index, whose plain `CREATE INDEX` is instant on an empty table. The `CREATE INDEX CONCURRENTLY` procedure in [Performance and benchmarks](#performance-and-benchmarks) is **only** for adding that index to an already-large existing table and does not apply here. Do **not** load benchmark/demo datasets into a staging database.
+
+### 3. Mint the first API key (bootstrap)
+
+`POST /v1/keys` is itself authenticated, so the first key is minted directly against Supabase exactly as in [API keys → Bootstrapping the first key](#api-keys), but with the Supabase `DATABASE_URL`. Mint a **dedicated low-privilege demo key** for the dashboard:
+
+```bash
+DATABASE_URL="$DATABASE_URL" node -e "
+import('./packages/persistence/dist/index.js').then(async (p) => {
+  const db = p.createDb(p.createPool(process.env.DATABASE_URL));
+  const { secret } = await p.createApiKey(db, { clientId: 'demo', label: 'render-dashboard' });
+  console.log(secret);
+  await db.destroy();
+});
+"
+```
+
+The secret prints **once** to stdout. Copy it into the Render dashboard as `NEXT_PUBLIC_LCA_API_KEY` (and reuse it for smoke tests). **Never commit it.** Rotate with `lca keys create … && lca keys revoke <old>`.
+
+### 4. Deploy with the Blueprint
+
+1. In Render, **New → Blueprint**, point it at the repo. Render reads [render.yaml](../render.yaml) and creates `lca-api` and `lca-web`.
+2. Render prompts for every `sync: false` variable. Fill them per the matrix below. Leave `GEMINI_API_KEY` / `GROQ_API_KEY` blank if you are not using those providers — the Mock providers are always registered, so the system is fully functional with no provider keys at all.
+3. Deploy `lca-api` first. Once it is healthy, copy its URL (e.g. `https://lca-api.onrender.com`) into `lca-web`'s `LCA_API_UPSTREAM`, then deploy `lca-web`.
+
+### Environment-variable matrix
+
+Secrets are injected at deploy time (`sync: false`); nothing below is stored in git.
+
+| Service | Variable | Kind | Value / source |
+|---|---|---|---|
+| lca-api | `NODE_ENV` | public | `production` (in Blueprint) |
+| lca-api | `LCA_LOG_LEVEL` | public | `info` (in Blueprint) |
+| lca-api | `PORT` | public | injected by Render |
+| lca-api | `DATABASE_URL` | **secret** | Supabase string + `?sslmode=require` |
+| lca-api | `GEMINI_API_KEY` | **secret** | optional — Google AI Studio key |
+| lca-api | `GROQ_API_KEY` | **secret** | optional — Groq console key |
+| lca-web | `NODE_ENV` | public | `production` (in Blueprint) |
+| lca-web | `PORT` | public | injected by Render |
+| lca-web | `LCA_API_UPSTREAM` | **secret-ish** | the `lca-api` URL; **server-side only, never sent to the browser** |
+| lca-web | `NEXT_PUBLIC_LCA_API_BASE_URL` | public | `/api/backend` (in Blueprint) — the same-origin rewrite path |
+| lca-web | `NEXT_PUBLIC_LCA_ENV` | public | `staging` (in Blueprint) |
+| lca-web | `NEXT_PUBLIC_LCA_API_KEY` | **secret** | the demo key from step 3 |
+
+Provider keys (`GEMINI_API_KEY`, `GROQ_API_KEY`, and any OpenAI/Anthropic keys) live **only** on `lca-api` and are **never** given a `NEXT_PUBLIC_` name, so they are never shipped to the browser. The single bearer value the browser does receive, `NEXT_PUBLIC_LCA_API_KEY`, is a deliberately public, untrusted-client demo credential (the dashboard is a public client); scope it to a low-privilege `client_id` and rotate it independently of any backend secret.
+
+### Providers on the free tier
+
+Gemini and Groq are each registered only when their key is set (see [Provider registration and health](#provider-registration-and-health)); neither is required. Both offer free developer quotas that the provider controls and can change at any time — the autopilot encodes no quota and prices every model at published list price, so cost estimates reflect list price even when your actual provider bill is $0. The Mock providers (`mock-cheap`, `mock-fast`) are registered in every environment, including production, which is what makes the smoke tests below deterministic without any external provider.
+
+### Smoke test
+
+Replace `WEB` with the `lca-web` URL, `API` with the `lca-api` URL, and `KEY` with the demo key.
+
+```bash
+# 1. Dashboard loads (Next.js server responds)
+curl -s -o /dev/null -w '%{http_code}\n' "$WEB/overview"                 # 200
+
+# 2. API health (DB reachable + pricing active)
+curl -s "$API/v1/health"                                                 # {"status":"ok",...} 200
+
+# 3. Auth is mandatory
+curl -s -o /dev/null -w '%{http_code}\n' "$API/v1/telemetry/summary"     # 401
+
+# 4. Authenticated read works
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "authorization: Bearer $KEY" "$API/v1/telemetry/summary"            # 200
+
+# 5. Deterministic completion through the always-on mock provider,
+#    which persists telemetry and computes cost
+curl -s -H "authorization: Bearer $KEY" -H 'content-type: application/json' \
+  -d '{"clientId":"demo","messages":[{"role":"user","content":"hi"}],"requiredCapabilities":[]}' \
+  "$API/v1/completions"                                                   # 200, routed to a mock model
+
+# 6. The browser path (same-origin rewrite → API) works end-to-end
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "authorization: Bearer $KEY" "$WEB/api/backend/v1/health"           # 200
+
+# 7. No secrets in logs — scan the Render log stream for the DB password / keys (expect no hits)
+```
+
+If `GEMINI_API_KEY` / `GROQ_API_KEY` are set, `GET /v1/providers` lists `gemini` / `groq` as healthy and a completion requiring their capabilities routes to them. `/metrics` (public) exposes Prometheus metrics for scraping.
+
+### Free-tier constraints and cold starts
+
+- **Render free web services sleep after ~15 minutes of inactivity** and cold-start on the next request (tens of seconds). The first request after idle — including a dashboard load or the API health check — will be slow. Both services sleep independently.
+- On cold start the API re-runs its boot sequence (schedulers, health probes); the graceful-shutdown path runs when Render stops the instance.
+- **Supabase free projects pause after ~1 week of inactivity** and must be resumed from the dashboard; a paused database makes `/v1/health` return `503` until resumed. Free Supabase also caps storage/egress — fine for staging, not for sustained production traffic.
+- Free Render services do not run pre-deploy commands and have no persistent disk — all state lives in Supabase, which is why migrations are a deliberate one-off step.
+- This shape is single-node per service. Horizontal scaling characteristics are described in [Deployment shape](#deployment-shape).
+
+### Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| API deploy fails during build with `tsc: not found` / missing `next` | `--include=dev` was dropped from `buildCommand`; `npm ci` omitted devDependencies under `NODE_ENV=production`. |
+| API boots then exits with code 2 ("no active pricing_tables row") | Step 2 (migrate + seed) was not run against this `DATABASE_URL`. |
+| `/v1/health` returns 503 | DB unreachable (Supabase paused, wrong host/pooler port) or no active pricing table. |
+| Dashboard loads but API calls fail | `LCA_API_UPSTREAM` unset/wrong, or `NEXT_PUBLIC_LCA_API_BASE_URL` not `/api/backend`. |
+| TLS / certificate error connecting to Supabase | Missing `?sslmode=require`; as a last resort use `?sslmode=no-verify`. |
+| 401 from the dashboard | `NEXT_PUBLIC_LCA_API_KEY` missing, revoked, or not matching a key in this database. |
+
+### Teardown
+
+Delete the two Render services (or the Blueprint) and, if the project is disposable, the Supabase project. Revoke the demo key (`lca keys revoke <keyId>`) if the Supabase database is retained.
 
 ## HTTP security hardening
 
