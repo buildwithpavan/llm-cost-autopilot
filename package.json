@@ -21,6 +21,7 @@
     "db:migrate": "node --enable-source-maps packages/persistence/dist/db/migrate.js",
     "db:seed": "node --enable-source-maps packages/persistence/dist/db/seed.js",
     "start:api": "node --enable-source-maps packages/api/dist/index.js",
+    "smoke:deploy": "node scripts/smoke-deployment.mjs",
     "bench:overhead": "vitest bench --run packages/core/bench",
     "bench:throughput": "node packages/api/bench/throughput.mjs",
     "bench:query": "node packages/persistence/bench/query-latency.mjs"

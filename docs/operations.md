@@ -314,6 +314,31 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 If `GEMINI_API_KEY` / `GROQ_API_KEY` are set, `GET /v1/providers` lists `gemini` / `groq` as healthy and a completion requiring their capabilities routes to them. `/metrics` (public) exposes Prometheus metrics for scraping.
 
+### Automated smoke test (`npm run smoke:deploy`)
+
+The curl sequence above is also packaged as a repeatable, redacting Node script — [scripts/smoke-deployment.mjs](../scripts/smoke-deployment.mjs) — runnable via `npm run smoke:deploy`. It runs entirely from a local checkout against the **already deployed** URLs; it deploys nothing, touches no external account, and introduces no credentials of its own.
+
+**Obtain the URLs and key.** The frontend/API base URLs are the `lca-web` / `lca-api` service URLs shown in the Render dashboard (e.g. `https://lca-web.onrender.com`, `https://lca-api.onrender.com`). The demo key is the one minted in [step 3](#3-mint-the-first-api-key-bootstrap) — the same value stored as `NEXT_PUBLIC_LCA_API_KEY`.
+
+**Provide the key safely.** Pass it via the environment, not a flag, so it never lands in shell history; the script redacts the key and every `Authorization` header from all output:
+
+```bash
+export LCA_SMOKE_API_KEY='<demo-key>'      # not echoed, not logged
+npm run smoke:deploy -- \
+  --web-url https://lca-web.onrender.com \
+  --api-url https://lca-api.onrender.com
+```
+
+All options have environment fallbacks (`LCA_SMOKE_WEB_URL`, `LCA_SMOKE_API_URL`, `LCA_SMOKE_API_KEY`, `LCA_SMOKE_TIMEOUT_MS`, `LCA_SMOKE_WARMUP_RETRIES`, `LCA_SMOKE_PROVIDERS`). Run `npm run smoke:deploy -- --help` for the full list.
+
+**Mandatory checks** (any failure exits non-zero): frontend `/overview` and `/cost` return 200; `/v1/health` is `ok`; an unauthenticated protected request is rejected `401`; authenticated `GET /v1/keys` (read-only — the script never creates or revokes keys), `GET /v1/catalog`, `GET /v1/telemetry/summary`, and `GET /v1/health/providers` succeed; a deterministic completion pinned to the always-on `mock-cheap` provider returns 200; that completion's event becomes replayable (telemetry recorded); and the public `/metrics` endpoint serves Prometheus output. The mock pin guarantees the baseline never calls — or requires — a paid provider.
+
+**Optional Gemini/Groq checks** run only when explicitly requested with `--providers gemini,groq` (or `LCA_SMOKE_PROVIDERS=gemini,groq`). For each requested provider the script looks it up in the live catalog and runs one pinned completion; if the provider is not configured on the API it is absent from the catalog and the requested check fails. These never run in the default invocation, so the baseline smoke test never depends on a paid provider.
+
+**Render waking from sleep.** Free services sleep after ~15 minutes; the first request cold-starts (tens of seconds). The script applies a generous per-request timeout (`--timeout-ms`, default 30000) and retries transient transport errors / `502`/`503`/`504` with exponential backoff (`--warmup-retries`, default 5), so a waking service is tolerated rather than reported as a failure. If the whole stack is cold, the first run may take a minute; a second run is fast.
+
+**Interpreting failures.** Each line prints `PASS`/`FAIL` with the HTTP status and, on failure, a short redacted response snippet. A `401` on the authenticated checks means the key is missing/revoked or does not exist in this database; a `503` on `/v1/health` means Supabase is paused/unreachable or no pricing table is active; a `0`/timeout status means the service never responded within the timeout (still cold, wrong URL, or down). The overall exit code is `0` only when every required (and every explicitly requested) check passes.
+
 ### Free-tier constraints and cold starts
 
 - **Render free web services sleep after ~15 minutes of inactivity** and cold-start on the next request (tens of seconds). The first request after idle — including a dashboard load or the API health check — will be slow. Both services sleep independently.

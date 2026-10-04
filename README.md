@@ -249,6 +249,8 @@ The dashboard proxies the API through a same-origin Next.js rewrite, so the brow
 
 Full walkthrough — Supabase setup, one-off migrate/seed, first-key bootstrap, the environment-variable matrix, deterministic smoke tests, and free-tier/cold-start limits — is in [docs/operations.md → Deployment: Render + Supabase](docs/operations.md#deployment-render--supabase-zero-cost-staging).
 
+After deploying, verify the live stack with the redacting smoke test: `npm run smoke:deploy -- --web-url <web> --api-url <api>` (demo key via `LCA_SMOKE_API_KEY`). It exercises the frontend, health, auth rejection, catalog, a deterministic mock completion, telemetry, provider health, and metrics, and exits non-zero on any failure — see [Automated smoke test](docs/operations.md#automated-smoke-test-npm-run-smokedeploy).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
