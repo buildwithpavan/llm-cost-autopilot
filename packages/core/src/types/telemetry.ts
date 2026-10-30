@@ -27,6 +27,10 @@ export const candidateScoreSchema = z.object({
   included: z.boolean(),
   exclusionReason: z.string().nullable().default(null),
   scoreBreakdown: z.record(z.string(), z.number()),
+  // Decimal USD string the candidate would have cost for this request. Null for
+  // excluded candidates (never priced). Lets clients show cheapest-vs-chosen
+  // ("without LCA" vs "with LCA") savings without re-pricing on the wire.
+  estimatedCostUsd: z.string().nullable().default(null),
 });
 export type CandidateScore = z.infer<typeof candidateScoreSchema>;
 

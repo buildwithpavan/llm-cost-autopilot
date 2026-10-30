@@ -8,3 +8,4 @@ export * from "./rules.js";
 export * from "./rollups.js";
 export * from "./replay.js";
 export * from "./preview.js";
+export * from "./completions.js";

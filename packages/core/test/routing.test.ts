@@ -133,6 +133,27 @@ describe("deterministic routing", () => {
     expect(decision.rationale.every((r) => typeof r.factor === "string")).toBe(true);
   });
 
+  it("prices every included candidate and leaves excluded candidates unpriced", () => {
+    const decision = decideRoute({
+      request: mkReq({ requirements: { requiredCapabilities: [], maxLatencyMs: 200 } }),
+      catalog: MODELS,
+      pricingTable: PRICING,
+    });
+    for (const c of decision.candidateRanking) {
+      if (c.included) {
+        expect(c.estimatedCostUsd).not.toBeNull();
+        expect(Number(c.estimatedCostUsd)).toBeGreaterThan(0);
+      } else {
+        expect(c.estimatedCostUsd).toBeNull();
+      }
+    }
+    // The chosen candidate's per-candidate price matches the decision's estimate.
+    const chosen = decision.candidateRanking.find(
+      (c) => c.modelId === decision.chosenModelId && c.providerId === decision.chosenProviderId,
+    );
+    expect(chosen?.estimatedCostUsd).toBe(decision.estimatedCostUsd);
+  });
+
   it("applies deterministic tiebreaker when candidates score equally (FR-031)", () => {
     const evenModels: Model[] = [
       { ...MODELS[0], modelId: "twin:a", providerId: "twin", pricingDescriptorRef: "twin:a" },

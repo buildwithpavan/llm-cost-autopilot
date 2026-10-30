@@ -49,6 +49,7 @@ export function filterCandidates(
       included,
       exclusionReason: reason,
       scoreBreakdown: {},
+      estimatedCostUsd: null,
     });
   }
   return results;

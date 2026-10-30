@@ -56,6 +56,7 @@ export const REFERENCE_EVENT: TelemetryEvent = {
           capabilityScore: 1.0,
           total: 0.9131,
         },
+        estimatedCostUsd: "0.000045",
       },
       {
         providerId: "anthropic",
@@ -70,6 +71,7 @@ export const REFERENCE_EVENT: TelemetryEvent = {
           capabilityScore: 1.0,
           total: 0.7623,
         },
+        estimatedCostUsd: "0.000071",
       },
       {
         providerId: "google",
@@ -84,6 +86,7 @@ export const REFERENCE_EVENT: TelemetryEvent = {
           capabilityScore: 0,
           total: 0,
         },
+        estimatedCostUsd: null,
       },
     ],
     chosenModelId: "gpt-4o-mini",

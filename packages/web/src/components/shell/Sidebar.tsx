@@ -4,6 +4,11 @@ import { SystemHealthCard } from "./SystemHealthCard.js";
 
 type NavItem = { key: string; label: string; glyph: ReactNode };
 
+const GET_STARTED: NavItem[] = [
+  { key: "Playground", label: "Playground", glyph: "▶" },
+  { key: "Connect", label: "Connect App", glyph: "⚯" },
+];
+
 const MAIN: NavItem[] = [
   { key: "Overview", label: "Overview", glyph: "⌂" },
   { key: "Requests", label: "Requests", glyph: "⇄" },
@@ -37,6 +42,7 @@ export function Sidebar({
 }) {
   return (
     <aside className={styles.side} aria-label="Sections">
+      <Section heading="GET STARTED" items={GET_STARTED} activeKey={activeKey} />
       <Section heading="MAIN" items={MAIN} activeKey={activeKey} />
       <Section heading="TOOLS" items={TOOLS} activeKey={activeKey} />
       <Section heading="SYSTEM" items={SYSTEM} activeKey={activeKey} />

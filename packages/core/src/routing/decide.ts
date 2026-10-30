@@ -94,7 +94,8 @@ export function decideRoute(input: DecideInput): RoutingDecision {
   }
 
   // Pre-compute cost extremes across included models to normalize the cost score.
-  const includedCosts = includedModels.map((m) => {
+  const includedCostByModel = new Map<string, string>();
+  for (const m of includedModels) {
     const c = estimateCostUsd({
       table: input.pricingTable,
       providerId: m.providerId,
@@ -102,8 +103,9 @@ export function decideRoute(input: DecideInput): RoutingDecision {
       inputTokens: input.request.estimatedInputTokens,
       outputTokens: Math.max(4, Math.floor(input.request.estimatedInputTokens / 4)),
     });
-    return Number(c);
-  });
+    includedCostByModel.set(`${m.providerId}:${m.modelId}`, c);
+  }
+  const includedCosts = [...includedCostByModel.values()].map(Number);
   const minCost = Math.min(...includedCosts);
   const maxCost = Math.max(...includedCosts);
 
@@ -119,6 +121,7 @@ export function decideRoute(input: DecideInput): RoutingDecision {
     }
     const model = input.catalog.find((m) => m.modelId === c.modelId)!;
     c.scoreBreakdown = scoreCandidate(model, input.request, input.pricingTable, minCost, maxCost);
+    c.estimatedCostUsd = includedCostByModel.get(`${model.providerId}:${model.modelId}`) ?? null;
   }
 
   // Rank included candidates by total score desc; tiebreak by (providerId, modelId) asc.

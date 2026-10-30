@@ -112,6 +112,7 @@ export function buildRoutingDecision(input: BuildRoutingDecisionInput): RoutingD
           included: true,
           exclusionReason: null,
           scoreBreakdown: { override: 1 },
+          estimatedCostUsd,
         },
       ],
       chosenProviderId: target.providerId,
