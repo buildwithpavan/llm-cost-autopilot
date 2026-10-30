@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
 
+# Least privilege: CI only reads the repo. No job needs write access to
+# contents, packages, deployments, or any other scope.
+permissions:
+  contents: read
+
 jobs:
   ci:
     name: build + typecheck + lint + test
@@ -24,6 +29,9 @@ jobs:
           --health-retries=20
     env:
       DATABASE_URL: postgres://lca:lca@localhost:5432/lca
+      # Run the DB-backed integration suites (gated on RUN_DB_TESTS) against the
+      # ephemeral postgres service above — never a real/staging database.
+      RUN_DB_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,8 +45,22 @@ jobs:
         run: npm run lint
       - name: build
         run: npm run build
+      # DB integration tests need the schema + an active pricing snapshot; the
+      # service container starts empty, so migrate + seed it before the suite.
+      - name: db migrate + seed
+        run: |
+          npm run db:migrate
+          npm run db:seed
       - name: test
-        run: npm run test -- --coverage
+        run: npm run test
+      - name: frontend typecheck
+        run: npm run typecheck -w @lca/web
+      - name: frontend lint
+        run: npm run lint -w @lca/web
+      - name: frontend test
+        run: cd packages/web && npx vitest run
+      - name: frontend build
+        run: npm run build -w @lca/web
       - name: bench smoke (routing overhead)
         run: npm run bench:overhead
       - name: bench smoke (throughput short phase)

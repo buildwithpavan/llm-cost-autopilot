@@ -23,6 +23,7 @@ Concrete playbooks for running the backend in dev, staging, and production. This
 17. [Observability endpoints](#observability-endpoints)
 18. [Backup and restore](#backup-and-restore)
 19. [Incident playbooks](#incident-playbooks)
+20. [CI/CD](#cicd)
 
 ---
 
@@ -577,3 +578,60 @@ node scripts/audit-secrets.mjs
 ```
 
 The audit injects a distinctive secret into the test-run env, runs the entire test suite, dumps `telemetry_events`, and greps every captured byte for the injected value. Exit 0 iff zero occurrences.
+
+## CI/CD
+
+Continuous integration runs on **GitHub Actions**; continuous deployment is handled **natively by Render** from the connected Git branch. The two are separate systems — this section documents the *actual* wiring, including where they are and are not coupled.
+
+### What triggers CI
+
+The [`ci`](../.github/workflows/ci.yml) workflow runs on:
+
+- every **pull request** (validation only — no deployment), and
+- every **push to `main`** (the branch Render deploys).
+
+Two further workflows run on the same events: [`security`](../.github/workflows/security.yml) (gitleaks secret scan + `npm audit --omit=dev --audit-level=high`) and, on `v*` tags only, [`release`](../.github/workflows/release.yml) (builds and publishes the API container image to GHCR). CI permissions are least-privilege (`contents: read`).
+
+### What CI checks
+
+The `ci` job runs on Node 22 with `npm ci`, against an **ephemeral `postgres:16` service container** (never the staging Supabase database):
+
+1. `npm run typecheck` (backend)
+2. `npm run lint` (backend)
+3. `npm run build`
+4. `npm run db:migrate && npm run db:seed` — provisions the throwaway CI database (the integration suites need an active pricing snapshot)
+5. `npm run test` with `RUN_DB_TESTS=1` — the full backend suite **including** the DB integration tests
+6. `npm run typecheck -w @lca/web` (frontend)
+7. `npm run lint -w @lca/web` (frontend)
+8. `npx vitest run` in `packages/web` (frontend tests)
+9. `npm run build -w @lca/web` (`next build`)
+10. `npm run bench:overhead` and a short `npm run bench:throughput` smoke
+11. `node scripts/audit-secrets.mjs` (end-to-end secret-leak audit)
+
+A second job guards against vendor-SDK imports leaking outside `packages/providers` and against unreviewed `packages/core` edits. **Any failed step fails the workflow.** CI never needs Render, Supabase, or provider (Gemini/Groq) credentials — the deterministic Mock provider and the local service container cover everything.
+
+### How Render deploys (and whether CI gates it)
+
+Render auto-deploys each service (`lca-api`, `lca-web`) from its linked branch (`main`) per the service's **Auto-Deploy** setting (Render Dashboard → service → *Settings*):
+
+| Mode | Behavior |
+|---|---|
+| **On Commit** (Render default) | Deploys as soon as a commit lands on `main`, **independent of GitHub Actions**. |
+| **After CI Checks Pass** | Deploys only after **all** GitHub checks for the commit conclude `success`/`neutral`/`skipped`; does **not** deploy if any check fails or if zero checks are detected. |
+| **Off** | Manual deploys only. |
+
+The committed [render.yaml](../render.yaml) does **not** set `autoDeploy`, so unless changed in the Dashboard the services use **On Commit** — meaning **Render currently deploys independently of CI**. A red CI run does **not** by itself block a Render deploy in that mode.
+
+**To gate deployment on CI** (the desired `push → CI → deploy` flow), set each service's Auto-Deploy to **After CI Checks Pass** in the Render Dashboard. This is a native Render setting that reads the GitHub Checks API — it requires **no** Render API key, deploy hook, or GitHub secret, and nothing is added to the repository. We deliberately do **not** add a GitHub Action that calls Render (that would be a second, secret-bearing deployment path risking duplicate deploys).
+
+Pull requests never deploy the staging services (Render deploys only on branch pushes/merges; PR preview environments are not enabled).
+
+### Inspecting pipelines
+
+- **GitHub Actions:** repo → *Actions* tab → the `ci` / `security` run for the commit.
+- **Render deploys:** Render Dashboard → `lca-api` / `lca-web` → *Deploys* (and *Events*) page shows each triggered deploy, its commit, and build/live status.
+
+### Troubleshooting
+
+- **CI passes but Render did not deploy:** confirm the service's Auto-Deploy is **On Commit** or **After CI Checks Pass** (not Off); confirm the commit landed on the linked branch `main`; check the commit message has no `[skip render]`/`[render skip]` phrase; check the *Events* page for a skipped/failed deploy. Under **After CI Checks Pass**, Render waits until *all* checks finish and will not deploy if any failed or none were reported.
+- **Render deployed but the app is unhealthy:** check `GET /v1/health` (503 → Supabase paused/unreachable or no active pricing); review the Render deploy logs; verify the `lca-api` env (`DATABASE_URL` with `sslmode=verify-full&sslrootcert=/etc/secrets/supabase-ca.crt` and the uploaded `supabase-ca.crt` secret file); for `lca-web` verify `LCA_API_UPSTREAM` is the real `lca-api` URL. See [Deployment: Render + Supabase → Troubleshooting](#troubleshooting).

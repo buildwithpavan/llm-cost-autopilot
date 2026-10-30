@@ -251,6 +251,8 @@ Full walkthrough — Supabase setup, one-off migrate/seed, first-key bootstrap, 
 
 After deploying, verify the live stack with the redacting smoke test: `npm run smoke:deploy -- --web-url <web> --api-url <api>` (demo key via `LCA_SMOKE_API_KEY`). It exercises the frontend, health, auth rejection, catalog, a deterministic mock completion, telemetry, provider health, and metrics, and exits non-zero on any failure — see [Automated smoke test](docs/operations.md#automated-smoke-test-npm-run-smokedeploy).
 
+**CI/CD.** GitHub Actions ([`ci`](.github/workflows/ci.yml)) validates every PR and push to `main` (typecheck, lint, backend + DB integration tests, frontend typecheck/lint/test, build) against an ephemeral Postgres — no Render/Supabase/provider credentials. Render deploys `main` natively; whether a deploy waits for CI depends on each service's Render Auto-Deploy setting. See [docs/operations.md → CI/CD](docs/operations.md#cicd).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
